@@ -35,10 +35,15 @@ export default function AppSettingsPage() {
   const [weights, setWeights] = useState(loadWeights);
 
   useEffect(() => {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify(weights.map(({ key, value }) => ({ key, value }))),
-    );
+    // Storage can be unavailable in sandboxed embeds; weights still work in-memory.
+    try {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(weights.map(({ key, value }) => ({ key, value }))),
+      );
+    } catch {
+      // ignore
+    }
   }, [weights]);
 
   const total = weights.reduce((sum, w) => sum + w.value, 0);
