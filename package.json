@@ -10,7 +10,7 @@
     "check": "tsc",
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "tsx script/migrate.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
