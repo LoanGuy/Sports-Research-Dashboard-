@@ -2,6 +2,10 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { initMonitoring, captureError } from "./monitoring";
+import { startJobs } from "./jobs";
+
+const monitoringEnabled = initMonitoring();
 
 const app = express();
 const httpServer = createServer(app);
@@ -67,6 +71,7 @@ app.use((req, res, next) => {
     const message = err.message || "Internal Server Error";
 
     console.error("Internal Server Error:", err);
+    captureError(err);
 
     if (res.headersSent) {
       return next(err);
@@ -98,6 +103,8 @@ app.use((req, res, next) => {
     },
     () => {
       log(`serving on port ${port}`);
+      log(`monitoring: ${monitoringEnabled ? "sentry enabled" : "disabled (no SENTRY_DSN)"}`);
+      startJobs();
     },
   );
 })();

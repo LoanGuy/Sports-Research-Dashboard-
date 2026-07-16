@@ -27,7 +27,7 @@ The dashboard **does not**:
 - Automatically choose a wager or recommend stake sizes.
 - Guarantee results or treat estimates as facts.
 
-## Current status: Phase 1 — clickable mockup
+## Current status: Phase 2 — infrastructure in place, data still sample
 
 This build is a clickable mockup using **fictional sample data**. Every player,
 team, odd, projection, weather reading, and live score is invented for
@@ -69,22 +69,43 @@ separate modules.
 ## Commands
 
 ```bash
-npm run dev     # start the dev server (port 5000)
-npm run test    # run the calculation library unit tests
-npm run check   # typecheck
-npm run build   # production build
+npm run dev          # start the dev server (port 5000)
+npm run test         # run the calculation library unit tests
+npm run check        # typecheck
+npm run build        # production build
+npm run db:generate  # regenerate SQL migrations after schema changes
+npm run db:migrate   # apply migrations to DATABASE_URL
 ```
+
+## Configuration
+
+Everything is optional — with no environment variables the app runs as an
+open mockup. Copy `.env.example` and set what you need:
+
+- `DATABASE_URL` — any standard PostgreSQL (Supabase, Neon, Railway).
+  Apply the schema with `npm run db:migrate`. Enables durable sessions and
+  (in later phases) collected data.
+- `DASHBOARD_PASSWORD` — turns on the login gate for the app and API.
+  Set `SESSION_SECRET` alongside it in production.
+- `SENTRY_DSN` — enables error monitoring.
+- `JOBS_ENABLED=1` — enables the in-process scheduled-job runner
+  (currently a heartbeat; data-collection jobs land in later phases).
+
+Deployment: `railway.json` is included (build + start commands); any Node
+host that runs `npm run build` then `npm run start` works.
 
 ## Roadmap (small phases)
 
-1. **Phase 1 (this build)** — clickable mockup with fake data.
-2. Provider selection using `docs/provider-comparison.md` (verify actual API
-   responses, never marketing pages).
-3. Data collection + normalization + event/market matching modules.
-4. Automatic no-vig consensus from live feeds; source freshness monitoring.
-5. National Weather Service integration; MLB lineup confirmation + alerts.
-6. Grading engine wired to configurable weights; history and audit records.
-7. Authentication, PostgreSQL persistence, scheduled jobs, error monitoring.
+1. ~~Phase 1 — clickable mockup with fake data.~~ Done.
+2. ~~Phase 2 — infrastructure: PostgreSQL schema + migrations, single-user
+   auth, sessions, Sentry hook, jobs scaffold, deploy config.~~ Done
+   (external accounts — database, hosting, Sentry — still to be connected).
+3. Provider selection using `docs/provider-comparison.md` (research pass #1
+   complete; verify finalists with actual API responses, never marketing pages).
+4. Data collection + normalization + event/market matching modules.
+5. Automatic no-vig consensus from live feeds; source freshness monitoring.
+6. National Weather Service integration; MLB lineup confirmation + alerts.
+7. Grading engine wired to configurable weights; history and audit records.
 
 ## Repository notes
 
