@@ -489,7 +489,7 @@ function ExchangeCalculator() {
 export default function CalculatorsPage() {
   return (
     <AppShell title="Calculators">
-      <div className="px-4 pt-3">
+      <div className="mx-auto w-full max-w-2xl px-4 pt-3">
         <Tabs defaultValue="vig">
           <TabsList className="grid h-11 w-full grid-cols-3">
             <TabsTrigger value="vig" className="text-[13px]">Vig remover</TabsTrigger>

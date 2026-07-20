@@ -75,7 +75,7 @@ export default function OpportunityDetailPage() {
 
   return (
     <AppShell title="Opportunity detail">
-      <div className="space-y-3 px-4 pt-3">
+      <div className="mx-auto w-full max-w-3xl space-y-3 px-4 pt-3">
         <Link
           href="/"
           className="inline-flex h-11 items-center gap-1.5 text-[14px] font-medium text-muted-foreground"

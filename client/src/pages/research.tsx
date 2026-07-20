@@ -73,14 +73,14 @@ export default function ResearchPage() {
   return (
     <AppShell>
       <div className="sticky top-14 z-30 space-y-2 border-b border-border bg-background/95 px-4 py-2.5 backdrop-blur">
-        <div className="scrollbar-none flex gap-2 overflow-x-auto">
+        <div className="scrollbar-none flex gap-2 overflow-x-auto md:flex-wrap md:overflow-visible">
           {sportChips.map((c) => (
             <Chip key={c.value} active={sport === c.value} onClick={() => setSport(c.value)}>
               {c.label}
             </Chip>
           ))}
         </div>
-        <div className="scrollbar-none flex gap-2 overflow-x-auto">
+        <div className="scrollbar-none flex gap-2 overflow-x-auto md:flex-wrap md:overflow-visible">
           {platformChips.map((c) => (
             <Chip key={c.value} active={platform === c.value} onClick={() => setPlatform(c.value)}>
               {c.label}
@@ -95,8 +95,8 @@ export default function ResearchPage() {
         </div>
       </div>
 
-      <div className="space-y-2.5 px-4 pt-3">
-        <p className="rounded-lg border border-border bg-card px-3 py-2 text-[12px] leading-4 text-muted-foreground">
+      <div className="space-y-2.5 px-4 pt-3 md:grid md:grid-cols-2 md:items-start md:gap-3 md:space-y-0 xl:grid-cols-3">
+        <p className="rounded-lg border border-border bg-card px-3 py-2 text-[12px] leading-4 text-muted-foreground md:col-span-2 xl:col-span-3">
           {MOCK_DATA_NOTICE} Tap any card for the detailed research view.
         </p>
 
@@ -105,7 +105,7 @@ export default function ResearchPage() {
         ))}
 
         {filtered.length === 0 ? (
-          <p className="py-10 text-center text-[14px] text-muted-foreground">
+          <p className="py-10 text-center text-[14px] text-muted-foreground md:col-span-2 xl:col-span-3">
             No opportunities match the current filters.
           </p>
         ) : null}

@@ -89,7 +89,7 @@ function LiveGameCard({ game }: { game: LiveGame }) {
 export default function LivePage() {
   return (
     <AppShell title="Live monitor">
-      <div className="space-y-2.5 px-4 pt-3">
+      <div className="mx-auto w-full max-w-3xl space-y-2.5 px-4 pt-3">
         <p className="rounded-lg border border-border bg-card px-3 py-2 text-[12px] leading-4 text-muted-foreground">
           College basketball foul monitor (sample data). Traffic light: Gray 0–5 team fouls, Yellow
           6–9, Green 10+. Foul counts always shown beside the color. Alerts describe the situation —

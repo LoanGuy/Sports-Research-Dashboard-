@@ -50,7 +50,7 @@ export default function AppSettingsPage() {
 
   return (
     <AppShell title="Settings">
-      <div className="space-y-3 px-4 pt-3">
+      <div className="mx-auto w-full max-w-2xl space-y-3 px-4 pt-3">
         <section className="rounded-xl border border-card-border bg-card px-4 py-4">
           <h2 className="text-[15px] font-bold text-foreground">Grading weights</h2>
           <p className="mt-1 text-[13px] leading-snug text-muted-foreground">
