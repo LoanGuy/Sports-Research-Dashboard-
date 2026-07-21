@@ -20,7 +20,7 @@ import {
   probToDecimal,
   removeVig,
   type FlexTier,
-} from "@/lib/odds";
+} from "@shared/odds";
 
 function Field({
   label,

@@ -1,24 +1,26 @@
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { AppShell } from "@/components/app-shell";
 import { OpportunityCard } from "@/components/opportunity-card";
-import { MOCK_DATA_NOTICE, opportunities } from "@/data/opportunities";
+import { platformName } from "@/components/badges";
+import { MOCK_DATA_NOTICE, opportunities as sampleOpportunities } from "@/data/opportunities";
 import { cn } from "@/lib/utils";
-import type { Platform, Sport } from "@shared/types";
+import type { Opportunity, Sport } from "@shared/types";
+
+interface LiveFeed {
+  origin: "live" | "none";
+  generatedAt: string;
+  count: number;
+  opportunities: Opportunity[];
+  reason?: string;
+}
 
 type SortKey = "edge" | "grade" | "time";
 
 const sportChips: { value: Sport | "all"; label: string }[] = [
   { value: "all", label: "All sports" },
   { value: "mlb", label: "MLB" },
-  { value: "tennis", label: "Tennis" },
   { value: "cbb", label: "College basketball" },
-];
-
-const platformChips: { value: Platform | "all"; label: string }[] = [
-  { value: "all", label: "All platforms" },
-  { value: "hardrock", label: "Hard Rock" },
-  { value: "prizepicks", label: "PrizePicks" },
-  { value: "novig", label: "NoVig" },
 ];
 
 const sortChips: { value: SortKey; label: string }[] = [
@@ -56,8 +58,36 @@ function Chip({
 /** Main feed: Compact Mode list of research opportunities. */
 export default function ResearchPage() {
   const [sport, setSport] = useState<Sport | "all">("all");
-  const [platform, setPlatform] = useState<Platform | "all">("all");
+  const [platform, setPlatform] = useState<string>("all");
   const [sort, setSort] = useState<SortKey>("edge");
+
+  // Live opportunities from the collection pipeline; sample data is the
+  // fallback so the mockup keeps working with nothing configured.
+  const { data: liveFeed } = useQuery<LiveFeed>({
+    queryKey: ["/api/opportunities"],
+    queryFn: async () => {
+      try {
+        const res = await fetch("/api/opportunities");
+        if (!res.ok) throw new Error(String(res.status));
+        return (await res.json()) as LiveFeed;
+      } catch {
+        return { origin: "none", generatedAt: "", count: 0, opportunities: [] };
+      }
+    },
+    staleTime: 60_000,
+    refetchInterval: 5 * 60_000,
+  });
+
+  const isLive = (liveFeed?.count ?? 0) > 0;
+  const opportunities = isLive ? liveFeed!.opportunities : sampleOpportunities;
+
+  const platformChips = useMemo(() => {
+    const unique = Array.from(new Set(opportunities.map((o) => o.platform)));
+    return [
+      { value: "all", label: "All platforms" },
+      ...unique.map((p) => ({ value: p, label: platformName(p) })),
+    ];
+  }, [opportunities]);
 
   const filtered = useMemo(() => {
     const list = opportunities.filter(
@@ -68,7 +98,7 @@ export default function ResearchPage() {
       if (sort === "grade") return gradeOrder[a.grade] - gradeOrder[b.grade];
       return a.eventTime.localeCompare(b.eventTime);
     });
-  }, [sport, platform, sort]);
+  }, [opportunities, sport, platform, sort]);
 
   return (
     <AppShell>
@@ -96,9 +126,17 @@ export default function ResearchPage() {
       </div>
 
       <div className="space-y-2.5 px-4 pt-3 md:grid md:grid-cols-2 md:items-start md:gap-3 md:space-y-0 xl:grid-cols-3">
-        <p className="rounded-lg border border-border bg-card px-3 py-2 text-[12px] leading-4 text-muted-foreground md:col-span-2 xl:col-span-3">
-          {MOCK_DATA_NOTICE} Tap any card for the detailed research view.
-        </p>
+        {isLive ? (
+          <p className="rounded-lg border border-emerald-500/25 bg-emerald-500/5 px-3 py-2 text-[12px] leading-4 text-emerald-400 md:col-span-2 xl:col-span-3">
+            Live market data — {liveFeed!.count} opportunities from the latest collection run.
+            Matchup and form analysis are not yet applied; grades reflect market value and data
+            confidence only. Tap any card for details.
+          </p>
+        ) : (
+          <p className="rounded-lg border border-border bg-card px-3 py-2 text-[12px] leading-4 text-muted-foreground md:col-span-2 xl:col-span-3">
+            {MOCK_DATA_NOTICE} Tap any card for the detailed research view.
+          </p>
+        )}
 
         {filtered.map((o) => (
           <OpportunityCard key={o.id} opportunity={o} />

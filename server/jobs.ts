@@ -7,6 +7,7 @@
  * without changing job definitions. Enabled with JOBS_ENABLED=1.
  */
 import { captureError } from "./monitoring";
+import { collectionConfigured, runCollection } from "./collect";
 
 export interface Job {
   name: string;
@@ -14,16 +15,41 @@ export interface Job {
   run: () => Promise<void>;
 }
 
+/**
+ * MLB odds collection cadence. Opt-in via COLLECT_INTERVAL_MIN (minimum 10
+ * minutes — provider odds are ~10 min delayed anyway, and each run costs
+ * one metered API request). Without it, collection is manual via
+ * GET /api/collect/run.
+ */
+function collectionJobs(): Job[] {
+  const raw = Number(process.env.COLLECT_INTERVAL_MIN ?? 0);
+  if (!raw || Number.isNaN(raw)) return [];
+  if (!collectionConfigured().ok) {
+    console.log("[jobs] COLLECT_INTERVAL_MIN set but collection is not configured — skipping");
+    return [];
+  }
+  const minutes = Math.max(10, Math.floor(raw));
+  return [
+    {
+      name: "mlb-odds-collection",
+      intervalMs: minutes * 60 * 1000,
+      run: async () => {
+        const summary = await runCollection();
+        console.log(`[jobs] mlb-odds-collection: ${summary.message}`);
+      },
+    },
+  ];
+}
+
 const jobs: Job[] = [
   {
-    // Placeholder proving the runner works; replaced by real data-collection
-    // jobs (odds polling, lineup checks, weather refresh) in later phases.
     name: "heartbeat",
     intervalMs: 5 * 60 * 1000,
     run: async () => {
       console.log(`[jobs] heartbeat ok at ${new Date().toISOString()}`);
     },
   },
+  ...collectionJobs(),
 ];
 
 const timers: NodeJS.Timeout[] = [];

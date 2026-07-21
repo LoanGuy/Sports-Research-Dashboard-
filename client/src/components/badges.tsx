@@ -5,7 +5,6 @@ import type {
   Freshness,
   Grade,
   Liquidity,
-  Platform,
 } from "@shared/types";
 
 /**
@@ -40,24 +39,40 @@ export function GradeBadge({ grade, label, size = "sm" }: { grade: Grade; label:
   );
 }
 
-const platformNames: Record<Platform, string> = {
+const platformNames: Record<string, string> = {
   hardrock: "Hard Rock",
   prizepicks: "PrizePicks",
   novig: "NoVig",
+  draftkings: "DraftKings",
+  fanduel: "FanDuel",
+  betmgm: "BetMGM",
+  caesars: "Caesars",
+  espnbet: "ESPN Bet",
+  williamhill: "William Hill",
+  pointsbet: "PointsBet",
+  unibet: "Unibet",
+  bovada: "Bovada",
 };
 
-const platformStyles: Record<Platform, string> = {
+const platformStyles: Record<string, string> = {
   hardrock: "bg-violet-500/15 text-violet-300 border border-violet-500/30",
   prizepicks: "bg-fuchsia-500/15 text-fuchsia-300 border border-fuchsia-500/30",
   novig: "bg-cyan-500/15 text-cyan-300 border border-cyan-500/30",
 };
 
-export function PlatformBadge({ platform }: { platform: Platform }) {
-  return <span className={cn(badgeBase, platformStyles[platform])}>{platformNames[platform]}</span>;
+const genericPlatformStyle = "bg-sky-500/10 text-sky-300 border border-sky-500/25";
+
+/** Works for the three comparison platforms and any live sportsbook ID. */
+export function PlatformBadge({ platform }: { platform: string }) {
+  return (
+    <span className={cn(badgeBase, platformStyles[platform] ?? genericPlatformStyle)}>
+      {platformName(platform)}
+    </span>
+  );
 }
 
-export function platformName(platform: Platform): string {
-  return platformNames[platform];
+export function platformName(platform: string): string {
+  return platformNames[platform] ?? platform.charAt(0).toUpperCase() + platform.slice(1);
 }
 
 const freshnessLabels: Record<Freshness, string> = {

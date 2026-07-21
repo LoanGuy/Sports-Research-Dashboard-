@@ -27,7 +27,7 @@ The dashboard **does not**:
 - Automatically choose a wager or recommend stake sizes.
 - Guarantee results or treat estimates as facts.
 
-## Current status: Phase 2 — infrastructure in place, data still sample
+## Current status: Phase 3 — live MLB market data (9-book consensus)
 
 This build is a clickable mockup using **fictional sample data**. Every player,
 team, odd, projection, weather reading, and live score is invented for
@@ -88,8 +88,12 @@ open mockup. Copy `.env.example` and set what you need:
 - `DASHBOARD_PASSWORD` — turns on the login gate for the app and API.
   Set `SESSION_SECRET` alongside it in production.
 - `SENTRY_DSN` — enables error monitoring.
-- `JOBS_ENABLED=1` — enables the in-process scheduled-job runner
-  (currently a heartbeat; data-collection jobs land in later phases).
+- `SPORTSGAMEODDS_API_KEY` — enables MLB odds collection and the provider
+  verification endpoint.
+- `JOBS_ENABLED=1` plus `COLLECT_INTERVAL_MIN` — automatic collection on an
+  interval. Without them, trigger runs manually: log in, then open
+  `/api/collect/run` (one metered provider request per run).
+- `ODDS_EVENTS_LIMIT` — events per collection run (default 3).
 
 Deployment: `railway.json` is included (build + start commands); any Node
 host that runs `npm run build` then `npm run start` works.
@@ -97,12 +101,12 @@ host that runs `npm run build` then `npm run start` works.
 ## Roadmap (small phases)
 
 1. ~~Phase 1 — clickable mockup with fake data.~~ Done.
-2. ~~Phase 2 — infrastructure: PostgreSQL schema + migrations, single-user
-   auth, sessions, Sentry hook, jobs scaffold, deploy config.~~ Done
-   (external accounts — database, hosting, Sentry — still to be connected).
-3. Provider selection using `docs/provider-comparison.md` (research pass #1
-   complete; verify finalists with actual API responses, never marketing pages).
-4. Data collection + normalization + event/market matching modules.
+2. ~~Phase 2 — infrastructure: PostgreSQL, auth, deploy, monitoring.~~ Done.
+3. ~~Phase 3 — MLB pipeline: SportsGameOdds collection, normalization,
+   per-book no-vig, median consensus, live opportunities in the feed.~~ Done
+   (tennis dropped by decision; Hard Rock/PrizePicks/NoVig still need a
+   provider — see docs/provider-comparison.md).
+4. Line-movement history, opening lines, and freshness monitoring depth.
 5. Automatic no-vig consensus from live feeds; source freshness monitoring.
 6. National Weather Service integration; MLB lineup confirmation + alerts.
 7. Grading engine wired to configurable weights; history and audit records.

@@ -47,6 +47,8 @@ export const marketRecords = pgTable(
   {
     id: serial("id").primaryKey(),
     source: text("source").notNull(),
+    /** Sportsbook the quote belongs to (source may be an aggregator). */
+    bookmaker: text("bookmaker"),
     sourceEventId: text("source_event_id").notNull(),
     eventId: integer("event_id").references(() => events.id),
     playerName: text("player_name"),

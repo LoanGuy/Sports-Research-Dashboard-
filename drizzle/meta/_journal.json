@@ -8,6 +8,13 @@
       "when": 1784188150911,
       "tag": "0000_crazy_shotgun",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1784594333558,
+      "tag": "0001_mature_cyclops",
+      "breakpoints": true
     }
   ]
 }

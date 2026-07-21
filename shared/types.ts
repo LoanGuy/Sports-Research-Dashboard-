@@ -6,8 +6,9 @@
  * hand-written sample data, clearly labeled as such in the UI.
  */
 
-export type Sport = "mlb" | "tennis" | "cbb";
+export type Sport = "mlb" | "cbb";
 
+/** Well-known comparison platforms; live data may add sportsbook IDs. */
 export type Platform = "hardrock" | "prizepicks" | "novig";
 
 /** Letter grade. "Incomplete" is used when data is missing, never hidden. */
@@ -109,6 +110,8 @@ export interface PrizePicksContext {
 
 export interface Opportunity {
   id: string;
+  /** Whether this record came from sample data or the live pipeline. */
+  origin: "sample" | "live";
   sport: Sport;
   league: string;
   eventName: string;
@@ -120,7 +123,8 @@ export interface Opportunity {
   /** Side being researched, e.g. "Over", "Under", "More", "Less", "Yes". */
   side: string;
   line: number;
-  platform: Platform;
+  /** Platform or sportsbook ID, e.g. "hardrock", "prizepicks", "fanduel". */
+  platform: string;
   /** American odds offered by the platform (traditional books). */
   offeredOdds: number | null;
   /** Payout multiplier context (PrizePicks-style platforms). */

@@ -16,7 +16,7 @@ import {
   probToAmerican,
   probToDecimal,
   removeVig,
-} from "./odds";
+} from "@shared/odds";
 
 describe("odds conversions", () => {
   it("converts positive American odds to decimal", () => {

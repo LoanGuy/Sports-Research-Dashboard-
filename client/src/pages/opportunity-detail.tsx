@@ -1,4 +1,5 @@
 import { Link, useRoute } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, ArrowLeft, CheckCircle2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { GradeBreakdown } from "@/components/grade-breakdown";
@@ -14,8 +15,8 @@ import {
 } from "@/components/badges";
 import { getOpportunity } from "@/data/opportunities";
 import { formatAmerican, formatHitRate, formatProb } from "@/lib/format";
-import { probToAmerican } from "@/lib/odds";
-import type { LineupStatus, RoofStatus } from "@shared/types";
+import { probToAmerican } from "@shared/odds";
+import type { LineupStatus, Opportunity, RoofStatus } from "@shared/types";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -52,10 +53,32 @@ const roofLabels: Record<RoofStatus, string> = {
   roof_status_unknown: "Roof status unknown",
 };
 
+interface LiveFeed {
+  opportunities: Opportunity[];
+}
+
 /** Detailed Mode: full research view for one opportunity. */
 export default function OpportunityDetailPage() {
   const [, params] = useRoute("/opportunity/:id");
-  const opportunity = params ? getOpportunity(params.id) : undefined;
+
+  // Live opportunities share the same cache as the feed page.
+  const { data: liveFeed } = useQuery<LiveFeed>({
+    queryKey: ["/api/opportunities"],
+    queryFn: async () => {
+      try {
+        const res = await fetch("/api/opportunities");
+        if (!res.ok) throw new Error(String(res.status));
+        return (await res.json()) as LiveFeed;
+      } catch {
+        return { opportunities: [] } as unknown as LiveFeed;
+      }
+    },
+    staleTime: 60_000,
+  });
+
+  const opportunity = params
+    ? (liveFeed?.opportunities?.find((o) => o.id === params.id) ?? getOpportunity(params.id))
+    : undefined;
 
   if (!opportunity) {
     return (
@@ -261,6 +284,7 @@ export default function OpportunityDetailPage() {
         ) : null}
 
         {/* 7. Recent form */}
+        {o.recentForm.length > 0 ? (
         <Section title="Recent form">
           <ul className="space-y-1.5">
             {o.recentForm.map((f, i) => (
@@ -277,6 +301,7 @@ export default function OpportunityDetailPage() {
             probability on purpose.
           </p>
         </Section>
+        ) : null}
 
         {/* 8. Conditions */}
         {o.weather ? (

@@ -1,0 +1,1 @@
+ALTER TABLE "market_records" ADD COLUMN "bookmaker" text;
