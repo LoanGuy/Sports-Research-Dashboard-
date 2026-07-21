@@ -181,7 +181,14 @@ export function buildOpportunities(
 
       const book = bookKey(best.quote);
       const bookName = bookDisplayName(book);
-      const sideLabel = side === "over" ? "Over" : "Under";
+      const isMoneyline = quotes[0].marketType === "Moneyline";
+      const sideLabel = isMoneyline
+        ? side === "over"
+          ? `${event.homeTeam} to win`
+          : `${event.awayTeam} to win`
+        : side === "over"
+          ? "Over"
+          : "Under";
       const fairForSide = side === "over" ? consensusProb : 1 - consensusProb;
       const mGrade = marketGrade(best.edgePts);
       const dGrade = confidenceGrade(consensus.sourceCount, disagreement);
@@ -227,6 +234,7 @@ export function buildOpportunities(
         breakEvenProb: best.breakEven,
         consensus,
         edgePts: Number(best.edgePts.toFixed(1)),
+        sideFairProb: fairForSide,
         grade: mGrade,
         gradeLabel: mGrade,
         categories,
@@ -240,6 +248,9 @@ export function buildOpportunities(
           "Odds on this data plan are about 10 minutes delayed; the live price may have moved.",
           "Matchup, lineup, and weather context is not analyzed yet — this is a price-only signal.",
           `${playerPart ? "A lineup change or early exit could void the assumptions behind this line." : "Game conditions can shift totals quickly."}`,
+          ...(isMoneyline && best.odds >= -120
+            ? ["Journal reminder: dog/near-even moneylines are your least successful logged bet shape."]
+            : []),
         ],
         bottomLine: `The available line appears favorable against the ${consensus.sourceCount}-book market estimate. Treat it as provisional until matchup analysis is added.`,
         dataConfidence: dGrade === "A" ? "high" : dGrade === "B" ? "medium" : "low",

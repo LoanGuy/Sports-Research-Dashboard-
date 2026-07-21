@@ -209,7 +209,7 @@ async function runOddsApiCollection(retrievedAt: Date): Promise<{ rows: number; 
   let eventCount = 0;
   let creditsRemaining: string | null = null;
 
-  const totals = await oddsApiFetch("/v4/sports/baseball_mlb/odds/?regions=us,us2&markets=totals&oddsFormat=american", key);
+  const totals = await oddsApiFetch("/v4/sports/baseball_mlb/odds/?regions=us,us2&markets=h2h,totals&oddsFormat=american", key);
   creditsRemaining = totals.remaining ?? creditsRemaining;
   if (totals.status !== 200) {
     await safeAudit("data-quality", `The Odds API totals request failed (${totals.status})`, { sample: totals.body.slice(0, 300) });

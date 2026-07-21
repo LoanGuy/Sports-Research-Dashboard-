@@ -3,7 +3,6 @@ import { Link, useLocation } from "wouter";
 import { Activity, Calculator, Info, LineChart, NotebookPen, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DISCLAIMER } from "@shared/types";
-import { MOCK_DATA_NOTICE } from "@/data/opportunities";
 import {
   Popover,
   PopoverContent,
@@ -47,7 +46,7 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
               {title ?? "Edge Research"}
             </h1>
             <p className="truncate text-[11px] leading-3 text-muted-foreground">
-              Research tool · sample data · no wagers placed
+              Research tool · no wagers placed
             </p>
           </div>
 
@@ -89,7 +88,11 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
               <PopoverContent align="end" className="w-80 text-[13px] leading-snug">
                 <p className="font-semibold text-foreground">About this dashboard</p>
                 <p className="mt-1.5 text-muted-foreground">{DISCLAIMER}</p>
-                <p className="mt-2 text-muted-foreground">{MOCK_DATA_NOTICE}</p>
+                <p className="mt-2 text-muted-foreground">
+                Odds come from licensed data providers (SportsGameOdds and The Odds API) and are
+                about 10 minutes delayed on the current plans. All collected books shape the
+                market consensus; only your own books surface as opportunities.
+              </p>
               </PopoverContent>
             </Popover>
           </div>

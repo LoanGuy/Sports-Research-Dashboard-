@@ -134,6 +134,8 @@ export interface Opportunity {
   consensus: Consensus;
   /** consensus.fairProb - breakEvenProb, in percentage points. */
   edgePts: number;
+  /** Fair probability for the surfaced side (parlay math uses this). */
+  sideFairProb?: number;
   grade: Grade;
   /** Display grade with modifier, e.g. "B+". */
   gradeLabel: string;

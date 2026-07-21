@@ -5,7 +5,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { AppShell } from "@/components/app-shell";
 import { OpportunityCard } from "@/components/opportunity-card";
 import { platformName } from "@/components/badges";
-import { MOCK_DATA_NOTICE, opportunities as sampleOpportunities } from "@/data/opportunities";
+import { ParlayTray } from "@/components/parlay-tray";
 import { cn } from "@/lib/utils";
 import { queryClient } from "@/lib/queryClient";
 import type { Opportunity, Sport } from "@shared/types";
@@ -96,7 +96,7 @@ export default function ResearchPage() {
 
   const hasLiveData = liveFeed?.origin === "live";
   const isLive = hasLiveData && (liveFeed?.count ?? 0) > 0;
-  const opportunities = isLive ? liveFeed!.opportunities : sampleOpportunities;
+  const opportunities = isLive ? liveFeed!.opportunities : [];
 
   const platformChips = useMemo(() => {
     const unique = Array.from(new Set(opportunities.map((o) => o.platform)));
@@ -172,31 +172,35 @@ export default function ResearchPage() {
             Live data collected, but none of your books (Hard Rock, Fliff) currently beat the
             market consensus by 1+ points. That is a normal, honest result — edges come and go.
             Use Calculators → Price check to evaluate any line manually, or refresh closer to
-            game time. Sample cards are shown below for reference.
+            game time.
           </p>
         ) : null}
         {isLive ? (
           <p className="rounded-lg border border-emerald-500/25 bg-emerald-500/5 px-3 py-2 text-[12px] leading-4 text-emerald-400 md:col-span-2 xl:col-span-3">
             Live market data — {liveFeed!.count} opportunities at your books (Hard Rock, Fliff)
             from the latest collection run, measured against the full multi-book consensus.
-            Matchup and form analysis are not yet applied. Tap any card for details.
+            Matchup and form analysis are not yet applied. Tap a card for details, or use
+            “+ Parlay” to build and price a ticket.
           </p>
-        ) : (
+        ) : null}
+        {!hasLiveData ? (
           <p className="rounded-lg border border-border bg-card px-3 py-2 text-[12px] leading-4 text-muted-foreground md:col-span-2 xl:col-span-3">
-            {MOCK_DATA_NOTICE} Tap any card for the detailed research view.
+            No market data collected yet. Tap “Refresh market data” above to pull the latest
+            odds from your providers (one metered request per run).
           </p>
-        )}
+        ) : null}
 
         {filtered.map((o) => (
           <OpportunityCard key={o.id} opportunity={o} />
         ))}
 
-        {filtered.length === 0 ? (
+        {isLive && filtered.length === 0 ? (
           <p className="py-10 text-center text-[14px] text-muted-foreground md:col-span-2 xl:col-span-3">
             No opportunities match the current filters.
           </p>
         ) : null}
       </div>
+      <ParlayTray />
     </AppShell>
   );
 }

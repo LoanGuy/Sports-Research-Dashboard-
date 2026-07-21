@@ -4,7 +4,6 @@ import { Link } from "wouter";
 import { ArrowLeft, Download } from "lucide-react";
 import html2canvas from "html2canvas";
 import { Button } from "@/components/ui/button";
-import { opportunities as sampleOpportunities } from "@/data/opportunities";
 import { formatAmerican, formatProb } from "@/lib/format";
 import { platformName } from "@/components/badges";
 import { cn } from "@/lib/utils";
@@ -91,9 +90,9 @@ export default function ReportPage() {
   });
 
   const isLive = (liveFeed?.count ?? 0) > 0;
-  const source = isLive ? liveFeed!.opportunities : sampleOpportunities;
+  const source = isLive ? liveFeed!.opportunities : [];
   const ranked = [...source].sort((a, b) => b.edgePts - a.edgePts).slice(0, 10);
-  const maxEdge = Math.max(...ranked.map((o) => Math.max(o.edgePts, 0)), 1);
+  const maxEdge = Math.max(...ranked.map((o) => Math.max(o.edgePts, 0)), 1, 0.0001);
   const positiveCount = source.filter((o) => o.edgePts > 0).length;
   const topEdge = ranked[0]?.edgePts ?? 0;
   const medianBooks = ranked.length > 0 ? ranked[Math.floor(ranked.length / 2)].consensus.sourceCount : 0;
@@ -152,7 +151,7 @@ export default function ReportPage() {
             <div className="shrink-0 rounded-lg border border-border bg-secondary/60 px-3 py-2 text-right">
               <div className="text-[12px] font-bold text-foreground">{today}</div>
               <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                {isLive ? "Live market data" : "Sample data"}
+                {isLive ? "Live market data" : "No edges right now"}
               </div>
             </div>
           </div>
@@ -178,6 +177,12 @@ export default function ReportPage() {
             <span className="text-[11px] text-muted-foreground">vs market consensus</span>
           </div>
 
+          {ranked.length === 0 ? (
+            <p className="rounded-lg border border-border bg-card px-3 py-3 text-[12px] text-muted-foreground">
+              No priced edges at your books in the latest collection. An empty board is an honest
+              result — refresh closer to game time.
+            </p>
+          ) : null}
           <ol className="space-y-1.5">
             {ranked.map((o, i) => (
               <li key={o.id} className="rounded-xl border border-card-border bg-card px-3.5 py-2.5">

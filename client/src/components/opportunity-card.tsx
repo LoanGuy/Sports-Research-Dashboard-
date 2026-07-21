@@ -1,5 +1,6 @@
 import { Link } from "wouter";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Plus } from "lucide-react";
+import { addLeg } from "@/lib/parlay";
 import type { Opportunity } from "@shared/types";
 import { formatAmerican, formatHitRate, formatProb } from "@/lib/format";
 import {
@@ -57,6 +58,19 @@ export function OpportunityCard({ opportunity }: { opportunity: Opportunity }) {
         <FreshnessBadge freshness={o.freshness} updated={o.lastUpdated} />
         <ConfidenceBadge confidence={o.dataConfidence} short />
         {o.matchNeedsReview ? <ReviewFlag /> : null}
+        {o.origin === "live" && o.offeredOdds !== null ? (
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              addLeg(o);
+            }}
+            className="inline-flex h-7 items-center gap-1 rounded-md border border-primary/40 bg-primary/10 px-2 text-[11px] font-semibold text-foreground hover-elevate"
+            data-testid={`button-parlay-${o.id}`}
+          >
+            <Plus className="h-3 w-3" /> Parlay
+          </button>
+        ) : null}
         <span className="ml-auto text-[11px] text-muted-foreground">{o.eventTime}</span>
       </div>
     </Link>

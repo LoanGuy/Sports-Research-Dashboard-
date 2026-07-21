@@ -117,6 +117,24 @@ export function parseSgoEvents(payload: unknown): ParsedEvent[] {
       }
       const betTypeID = odd.betTypeID ?? "";
       const sideID = odd.sideID ?? "";
+      // Moneylines: two-sided home/away, no line. Kept only for the game
+      // market (statID "points").
+      if (statID === "points" && betTypeID === "ml" && (sideID === "home" || sideID === "away")) {
+        const periodID = odd.periodID ?? "game";
+        const groupKey = `__ml__|all|${periodID}`;
+        if (!groups.has(groupKey)) {
+          groups.set(groupKey, { statID: "__ml__", statEntityID: "all", periodID, books: new Map() });
+        }
+        const group = groups.get(groupKey)!;
+        for (const [book, quote] of Object.entries(odd.byBookmaker ?? {})) {
+          if (!group.books.has(book)) group.books.set(book, {});
+          const entry = group.books.get(book)!;
+          const parsedQuote = { odds: toNumber(quote.odds), line: null };
+          if (sideID === "home") entry.over = parsedQuote;
+          else entry.under = parsedQuote;
+        }
+        continue;
+      }
       if (betTypeID !== "ou" || (sideID !== "over" && sideID !== "under")) {
         skipped[`${statID}:${betTypeID}`] = (skipped[`${statID}:${betTypeID}`] ?? 0) + 1;
         continue;
@@ -139,7 +157,8 @@ export function parseSgoEvents(payload: unknown): ParsedEvent[] {
 
     const rows: ParsedMarketRow[] = [];
     for (const group of Array.from(groups.values())) {
-      const playerName = humanizePlayerId(group.statEntityID);
+      const isMoneyline = group.statID === "__ml__";
+      const playerName = isMoneyline ? null : humanizePlayerId(group.statEntityID);
       for (const [book, sides] of Array.from(group.books.entries())) {
         const line = sides.over?.line ?? sides.under?.line ?? null;
         // Only keep quotes where both sides share the same line (or one side
@@ -154,7 +173,7 @@ export function parseSgoEvents(payload: unknown): ParsedEvent[] {
         }
         rows.push({
           sourceEventId: event.eventID,
-          marketType: MLB_STAT_MAP[group.statID],
+          marketType: isMoneyline ? "Moneyline" : MLB_STAT_MAP[group.statID],
           marketPeriod: group.periodID,
           playerName,
           playerId: playerName ? group.statEntityID : null,
@@ -249,6 +268,31 @@ export function parseOddsApiEvents(events: unknown[]): OddsApiParsedEvent[] {
     for (const book of event.bookmakers ?? []) {
       if (!book.key) continue;
       for (const market of book.markets ?? []) {
+        // h2h outcomes are named by team, not Over/Under.
+        if (market.key === "h2h") {
+          let home: number | null = null;
+          let away: number | null = null;
+          for (const outcome of market.outcomes ?? []) {
+            if (typeof outcome.price !== "number") continue;
+            if (outcome.name === event.home_team) home = outcome.price;
+            else if (outcome.name === event.away_team) away = outcome.price;
+          }
+          if (home != null && away != null) {
+            rows.push({
+              sourceEventId: event.id,
+              marketType: "Moneyline",
+              marketPeriod: "game",
+              playerName: null,
+              playerId: null,
+              bookmaker: book.key,
+              line: null,
+              overOdds: home,
+              underOdds: away,
+              isLive,
+            });
+          }
+          continue;
+        }
         const marketType = ODDSAPI_MARKET_MAP[market.key ?? ""];
         if (!marketType) continue;
         // Pair outcomes by (player, line).

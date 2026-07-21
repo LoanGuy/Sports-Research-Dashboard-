@@ -13,7 +13,7 @@ import {
   ReviewFlag,
   platformName,
 } from "@/components/badges";
-import { getOpportunity } from "@/data/opportunities";
+
 import { formatAmerican, formatHitRate, formatProb } from "@/lib/format";
 import { probToAmerican } from "@shared/odds";
 import type { LineupStatus, Opportunity, RoofStatus } from "@shared/types";
@@ -77,14 +77,17 @@ export default function OpportunityDetailPage() {
   });
 
   const opportunity = params
-    ? (liveFeed?.opportunities?.find((o) => o.id === params.id) ?? getOpportunity(params.id))
+    ? liveFeed?.opportunities?.find((o) => o.id === params.id)
     : undefined;
 
   if (!opportunity) {
     return (
       <AppShell title="Not found">
         <div className="px-4 pt-6">
-          <p className="text-[14px] text-muted-foreground">This opportunity does not exist.</p>
+          <p className="text-[14px] text-muted-foreground">
+            This opportunity is not in the latest collection run — prices moved, or the data was
+            refreshed since you opened it.
+          </p>
           <Link href="/" className="mt-3 inline-block text-[14px] font-medium text-primary">
             Back to research
           </Link>
