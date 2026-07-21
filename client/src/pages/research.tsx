@@ -1,12 +1,13 @@
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
-import { FileBarChart } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { FileBarChart, RefreshCw } from "lucide-react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { AppShell } from "@/components/app-shell";
 import { OpportunityCard } from "@/components/opportunity-card";
 import { platformName } from "@/components/badges";
 import { MOCK_DATA_NOTICE, opportunities as sampleOpportunities } from "@/data/opportunities";
 import { cn } from "@/lib/utils";
+import { queryClient } from "@/lib/queryClient";
 import type { Opportunity, Sport } from "@shared/types";
 
 interface LiveFeed {
@@ -80,6 +81,19 @@ export default function ResearchPage() {
     refetchInterval: 5 * 60_000,
   });
 
+  const [collectMessage, setCollectMessage] = useState<string | null>(null);
+  const collect = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/collect/run");
+      const data = (await res.json()) as { ok?: boolean; message?: string };
+      setCollectMessage(data.message ?? "Collection finished.");
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/opportunities"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/consensus"] });
+    },
+  });
+
   const isLive = (liveFeed?.count ?? 0) > 0;
   const opportunities = isLive ? liveFeed!.opportunities : sampleOpportunities;
 
@@ -128,13 +142,29 @@ export default function ResearchPage() {
       </div>
 
       <div className="space-y-2.5 px-4 pt-3 md:grid md:grid-cols-2 md:items-start md:gap-3 md:space-y-0 xl:grid-cols-3">
-        <Link
-          href="/report"
-          className="flex h-11 items-center justify-center gap-2 rounded-lg border border-border bg-card text-[13px] font-semibold text-foreground hover-elevate md:col-span-2 xl:col-span-3"
-          data-testid="link-report"
-        >
-          <FileBarChart className="h-4 w-4 text-emerald-400" /> View today's Edge Report (shareable)
-        </Link>
+        <div className="grid grid-cols-2 gap-2 md:col-span-2 xl:col-span-3">
+          <Link
+            href="/report"
+            className="flex h-11 items-center justify-center gap-2 rounded-lg border border-border bg-card text-[13px] font-semibold text-foreground hover-elevate"
+            data-testid="link-report"
+          >
+            <FileBarChart className="h-4 w-4 text-emerald-400" /> Edge Report
+          </Link>
+          <button
+            onClick={() => collect.mutate()}
+            disabled={collect.isPending}
+            className="flex h-11 items-center justify-center gap-2 rounded-lg border border-border bg-card text-[13px] font-semibold text-foreground hover-elevate disabled:opacity-60"
+            data-testid="button-collect"
+          >
+            <RefreshCw className={cn("h-4 w-4 text-sky-400", collect.isPending && "animate-spin")} />
+            {collect.isPending ? "Collecting…" : "Refresh market data"}
+          </button>
+        </div>
+        {collectMessage ? (
+          <p className="rounded-lg border border-border bg-card px-3 py-2 text-[12px] leading-4 text-muted-foreground md:col-span-2 xl:col-span-3">
+            {collectMessage}
+          </p>
+        ) : null}
 
         {isLive ? (
           <p className="rounded-lg border border-emerald-500/25 bg-emerald-500/5 px-3 py-2 text-[12px] leading-4 text-emerald-400 md:col-span-2 xl:col-span-3">
