@@ -41,6 +41,17 @@ export function GradeBadge({ grade, label, size = "sm" }: { grade: Grade; label:
 
 const platformNames: Record<string, string> = {
   hardrock: "Hard Rock",
+  hardrockbet: "Hard Rock",
+  hardrockbet_oh: "Hard Rock (OH)",
+  fliff: "Fliff",
+  betonlineag: "BetOnline",
+  betrivers: "BetRivers",
+  ballybet: "Bally Bet",
+  betparx: "betPARX",
+  mybookieag: "MyBookie",
+  lowvig: "LowVig",
+  betanysports: "BetAnySports",
+  betus: "BetUS",
   prizepicks: "PrizePicks",
   novig: "NoVig",
   draftkings: "DraftKings",
@@ -56,6 +67,8 @@ const platformNames: Record<string, string> = {
 
 const platformStyles: Record<string, string> = {
   hardrock: "bg-violet-500/15 text-violet-300 border border-violet-500/30",
+  hardrockbet: "bg-violet-500/15 text-violet-300 border border-violet-500/30",
+  hardrockbet_oh: "bg-violet-500/15 text-violet-300 border border-violet-500/30",
   prizepicks: "bg-fuchsia-500/15 text-fuchsia-300 border border-fuchsia-500/30",
   novig: "bg-cyan-500/15 text-cyan-300 border border-cyan-500/30",
 };

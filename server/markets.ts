@@ -181,3 +181,112 @@ export function parseSgoEvents(payload: unknown): ParsedEvent[] {
 
   return events;
 }
+
+
+/**
+ * Cross-provider player key: strip diacritics, lowercase, collapse spaces.
+ * "José Ramírez" (The Odds API) and "Jose Ramirez" (SportsGameOdds
+ * humanized ID) must group into one market.
+ */
+export function normalizePlayerKey(name: string): string {
+  return name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+
+/** The Odds API market keys we collect, mapped to our market names. */
+export const ODDSAPI_MARKET_MAP: Record<string, string> = {
+  totals: "Game total points",
+  pitcher_strikeouts: "Pitcher strikeouts",
+  batter_total_bases: "Total bases",
+  batter_hits: "Hits",
+};
+
+interface OddsApiOutcome {
+  name?: string; // "Over" | "Under"
+  description?: string; // player name on props
+  price?: number; // American odds
+  point?: number; // line
+}
+
+interface OddsApiBookmaker {
+  key?: string;
+  markets?: { key?: string; outcomes?: OddsApiOutcome[] }[];
+}
+
+export interface OddsApiParsedEvent {
+  sourceEventId: string;
+  homeTeam: string;
+  awayTeam: string;
+  startTime: Date;
+  rows: ParsedMarketRow[];
+}
+
+/**
+ * Parse The Odds API v4 events (list or single event) into market rows.
+ * Outcomes pair Over/Under per (market, player, line) per bookmaker.
+ */
+export function parseOddsApiEvents(events: unknown[]): OddsApiParsedEvent[] {
+  const out: OddsApiParsedEvent[] = [];
+  for (const raw of events) {
+    const event = raw as {
+      id?: string;
+      home_team?: string;
+      away_team?: string;
+      commence_time?: string;
+      bookmakers?: OddsApiBookmaker[];
+    };
+    if (!event.id || !event.home_team) continue;
+    const startTime = event.commence_time ? new Date(event.commence_time) : new Date();
+    const isLive = startTime.getTime() <= Date.now();
+    const rows: ParsedMarketRow[] = [];
+
+    for (const book of event.bookmakers ?? []) {
+      if (!book.key) continue;
+      for (const market of book.markets ?? []) {
+        const marketType = ODDSAPI_MARKET_MAP[market.key ?? ""];
+        if (!marketType) continue;
+        // Pair outcomes by (player, line).
+        const pairs = new Map<string, { over?: number; under?: number; line: number | null; player: string | null }>();
+        for (const outcome of market.outcomes ?? []) {
+          const player = outcome.description ?? null;
+          const line = typeof outcome.point === "number" ? outcome.point : null;
+          const key = `${player ?? ""}|${line ?? ""}`;
+          if (!pairs.has(key)) pairs.set(key, { line, player });
+          const pair = pairs.get(key)!;
+          if (outcome.name === "Over" && typeof outcome.price === "number") pair.over = outcome.price;
+          if (outcome.name === "Under" && typeof outcome.price === "number") pair.under = outcome.price;
+        }
+        for (const pair of Array.from(pairs.values())) {
+          if (pair.over == null || pair.under == null) continue;
+          rows.push({
+            sourceEventId: event.id,
+            marketType,
+            marketPeriod: "game",
+            playerName: pair.player,
+            playerId: pair.player ? normalizePlayerKey(pair.player) : null,
+            bookmaker: book.key,
+            line: pair.line,
+            overOdds: pair.over,
+            underOdds: pair.under,
+            isLive,
+          });
+        }
+      }
+    }
+
+    out.push({
+      sourceEventId: event.id,
+      homeTeam: event.home_team,
+      awayTeam: event.away_team ?? "Away",
+      startTime,
+      rows,
+    });
+  }
+  return out;
+}

@@ -14,7 +14,8 @@
 import { desc, eq, gt } from "drizzle-orm";
 import { events, marketRecords, type Event, type MarketRecord } from "@shared/schema";
 import type { Consensus, Grade, GradeCategory, Opportunity } from "@shared/types";
-import { americanToImpliedProb, median, noVigFromAmerican, probToAmerican } from "@shared/odds";
+import { americanToImpliedProb, median, noVigFromAmerican } from "@shared/odds";
+import { normalizePlayerKey } from "./markets";
 import { getDb, isDbConfigured } from "./db";
 
 const EDGE_THRESHOLD_PTS = 1.5;
@@ -30,6 +31,17 @@ const BOOK_NAMES: Record<string, string> = {
   pointsbet: "PointsBet",
   unibet: "Unibet",
   bovada: "Bovada",
+  hardrockbet: "Hard Rock",
+  hardrockbet_oh: "Hard Rock (OH)",
+  fliff: "Fliff",
+  betonlineag: "BetOnline",
+  betrivers: "BetRivers",
+  ballybet: "Bally Bet",
+  betparx: "betPARX",
+  mybookieag: "MyBookie",
+  lowvig: "LowVig",
+  betanysports: "BetAnySports",
+  betus: "BetUS",
 };
 
 export function bookDisplayName(id: string): string {
@@ -78,7 +90,13 @@ export function buildOpportunities(
     // delayed on the current plan, and a delayed price on a moving game is
     // not an edge — it is stale information. Pregame markets only.
     if (row.isLive) continue;
-    const key = [row.eventId, row.marketType, row.playerId ?? "", row.line ?? "", row.marketPeriod].join("|");
+    const key = [
+      row.eventId,
+      row.marketType,
+      row.playerName ? normalizePlayerKey(row.playerName) : "",
+      row.line ?? "",
+      row.marketPeriod,
+    ].join("|");
     const list = groups.get(key) ?? [];
     list.push(row);
     groups.set(key, list);
@@ -323,7 +341,13 @@ export function buildConsensusMarkets(
   for (const row of rows) {
     if (row.overOdds == null || row.underOdds == null || row.eventId == null) continue;
     if (row.isLive) continue; // pregame only — see buildOpportunities
-    const key = [row.eventId, row.marketType, row.playerId ?? "", row.line ?? "", row.marketPeriod].join("|");
+    const key = [
+      row.eventId,
+      row.marketType,
+      row.playerName ? normalizePlayerKey(row.playerName) : "",
+      row.line ?? "",
+      row.marketPeriod,
+    ].join("|");
     const list = groups.get(key) ?? [];
     list.push(row);
     groups.set(key, list);

@@ -6,10 +6,11 @@
  * stored. Runs are recorded in audit_log. Old records are kept — history
  * is part of the spec — and readers select the newest batch.
  */
-import { and, eq } from "drizzle-orm";
+import { and, eq, gte, lte } from "drizzle-orm";
 import { auditLog, events, marketRecords } from "@shared/schema";
 import { getDb, isDbConfigured } from "./db";
-import { parseSgoEvents, type ParsedEvent } from "./markets";
+import { parseOddsApiEvents, parseSgoEvents, type ParsedEvent, type ParsedMarketRow } from "./markets";
+import { findOddsApiKey } from "./providers/theoddsapi";
 
 const BASE = "https://api.sportsgameodds.com";
 const SOURCE = "sportsgameodds";
@@ -47,15 +48,31 @@ async function fetchEvents(limit: number): Promise<{ status: number | null; body
   }
 }
 
-async function upsertEvent(parsed: ParsedEvent): Promise<number> {
+/**
+ * Find-or-create the internal event. Matched on home team plus a ±2 hour
+ * start-time window so records from different providers (whose timestamps
+ * can differ by minutes) land on the same internal event.
+ */
+async function upsertEvent(homeTeam: string, awayTeam: string, startTime: Date, status: string): Promise<number> {
   const db = getDb();
+  const windowStart = new Date(startTime.getTime() - 2 * 60 * 60 * 1000);
+  const windowEnd = new Date(startTime.getTime() + 2 * 60 * 60 * 1000);
   const existing = await db
     .select({ id: events.id })
     .from(events)
-    .where(and(eq(events.sport, "mlb"), eq(events.homeTeam, parsed.homeTeam), eq(events.startTime, parsed.startTime)))
+    .where(
+      and(
+        eq(events.sport, "mlb"),
+        eq(events.homeTeam, homeTeam),
+        gte(events.startTime, windowStart),
+        lte(events.startTime, windowEnd),
+      ),
+    )
     .limit(1);
   if (existing.length > 0) {
-    await db.update(events).set({ status: parsed.status }).where(eq(events.id, existing[0].id));
+    if (status !== "scheduled") {
+      await db.update(events).set({ status }).where(eq(events.id, existing[0].id));
+    }
     return existing[0].id;
   }
   const inserted = await db
@@ -63,14 +80,42 @@ async function upsertEvent(parsed: ParsedEvent): Promise<number> {
     .values({
       sport: "mlb",
       league: "MLB",
-      startTime: parsed.startTime,
+      startTime,
       timezone: "UTC",
-      homeTeam: parsed.homeTeam,
-      awayTeam: parsed.awayTeam,
-      status: parsed.status,
+      homeTeam,
+      awayTeam,
+      status,
     })
     .returning({ id: events.id });
   return inserted[0].id;
+}
+
+async function storeRows(source: string, eventId: number, rows: ParsedMarketRow[], retrievedAt: Date): Promise<number> {
+  const db = getDb();
+  const values = rows
+    .filter((row) => row.overOdds !== null && row.underOdds !== null)
+    .map((row) => ({
+      source,
+      bookmaker: row.bookmaker,
+      sourceEventId: row.sourceEventId,
+      eventId,
+      playerName: row.playerName,
+      playerId: row.playerId,
+      marketType: row.marketType,
+      marketPeriod: row.marketPeriod,
+      line: row.line,
+      overOdds: row.overOdds,
+      underOdds: row.underOdds,
+      isLive: row.isLive,
+      retrievedAt,
+      changedAt: retrievedAt,
+      sourceStatus: "ok",
+      freshness: "delayed",
+    }));
+  if (values.length > 0) {
+    await db.insert(marketRecords).values(values);
+  }
+  return values.length;
 }
 
 export async function runCollection(): Promise<CollectionSummary> {
@@ -112,48 +157,102 @@ export async function runCollection(): Promise<CollectionSummary> {
   const skippedStatIds: Record<string, number> = {};
 
   for (const parsed of parsedEvents) {
-    const eventId = await upsertEvent(parsed);
+    const eventId = await upsertEvent(parsed.homeTeam, parsed.awayTeam, parsed.startTime, parsed.status);
     for (const [stat, count] of Object.entries(parsed.skippedStatIds)) {
       skippedStatIds[stat] = (skippedStatIds[stat] ?? 0) + count;
     }
-    const values = parsed.rows
-      .filter((row) => row.overOdds !== null && row.underOdds !== null)
-      .map((row) => ({
-        source: SOURCE,
-        bookmaker: row.bookmaker,
-        sourceEventId: row.sourceEventId,
-        eventId,
-        playerName: row.playerName,
-        playerId: row.playerId,
-        marketType: row.marketType,
-        marketPeriod: row.marketPeriod,
-        line: row.line,
-        overOdds: row.overOdds,
-        underOdds: row.underOdds,
-        isLive: row.isLive,
-        retrievedAt,
-        changedAt: retrievedAt,
-        sourceStatus: "ok",
-        // Free-tier odds are ~10 minutes delayed at the provider.
-        freshness: "delayed",
-      }));
-    if (values.length > 0) {
-      await db.insert(marketRecords).values(values);
-      rowsStored += values.length;
-    }
+    rowsStored += await storeRows(SOURCE, eventId, parsed.rows, retrievedAt);
   }
 
-  const message = `Collected ${rowsStored} market rows from ${parsedEvents.length} MLB event(s).`;
-  await safeAudit("job", message, { rowsStored, events: parsedEvents.length, skippedStatIds });
+  // Source #2: The Odds API — Hard Rock Bet et al. Runs when a key exists.
+  const oddsApi = await runOddsApiCollection(retrievedAt);
+
+  const message = `Collected ${rowsStored} rows from ${parsedEvents.length} MLB event(s) via SportsGameOdds${
+    oddsApi ? `; ${oddsApi.rows} rows from ${oddsApi.events} event(s) via The Odds API (credits left: ${oddsApi.creditsRemaining ?? "?"})` : ""
+  }.`;
+  await safeAudit("job", message, { rowsStored, events: parsedEvents.length, skippedStatIds, oddsApi });
   return {
     ok: true,
     message,
     apiStatus: status,
-    eventsSeen: parsedEvents.length,
-    rowsStored,
+    eventsSeen: parsedEvents.length + (oddsApi?.events ?? 0),
+    rowsStored: rowsStored + (oddsApi?.rows ?? 0),
     skippedStatIds,
     ranAt,
   };
+}
+
+const ODDSAPI_BASE = "https://api.the-odds-api.com";
+
+async function oddsApiFetch(path: string, key: string): Promise<{ status: number | null; body: string; remaining: string | null }> {
+  const url = new URL(path, ODDSAPI_BASE);
+  url.searchParams.set("apiKey", key);
+  try {
+    const res = await fetch(url, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(20000) });
+    return { status: res.status, body: await res.text(), remaining: res.headers.get("x-requests-remaining") };
+  } catch (error) {
+    return { status: null, body: String(error), remaining: null };
+  }
+}
+
+/**
+ * Collect from The Odds API: game totals for all upcoming events (2
+ * credits), then player props for the next ODDSAPI_EVENTS_LIMIT pregame
+ * events (6 credits each: 3 markets x 2 regions). Returns null when no
+ * key is configured.
+ */
+async function runOddsApiCollection(retrievedAt: Date): Promise<{ rows: number; events: number; creditsRemaining: string | null } | null> {
+  const key = findOddsApiKey()?.key;
+  if (!key) return null;
+
+  let rows = 0;
+  let eventCount = 0;
+  let creditsRemaining: string | null = null;
+
+  const totals = await oddsApiFetch("/v4/sports/baseball_mlb/odds/?regions=us,us2&markets=totals&oddsFormat=american", key);
+  creditsRemaining = totals.remaining ?? creditsRemaining;
+  if (totals.status !== 200) {
+    await safeAudit("data-quality", `The Odds API totals request failed (${totals.status})`, { sample: totals.body.slice(0, 300) });
+    return { rows: 0, events: 0, creditsRemaining };
+  }
+  let parsedList: ReturnType<typeof parseOddsApiEvents> = [];
+  try {
+    parsedList = parseOddsApiEvents(JSON.parse(totals.body) as unknown[]);
+  } catch {
+    await safeAudit("data-quality", "The Odds API totals response was not JSON", {});
+    return { rows: 0, events: 0, creditsRemaining };
+  }
+
+  const propLimit = Math.max(0, Math.min(4, Number(process.env.ODDSAPI_EVENTS_LIMIT ?? 2)));
+  const upcoming = parsedList.filter((e) => e.startTime.getTime() > Date.now());
+
+  for (const parsed of parsedList) {
+    if (parsed.rows.length === 0) continue;
+    const eventId = await upsertEvent(parsed.homeTeam, parsed.awayTeam, parsed.startTime, "scheduled");
+    rows += await storeRows("theoddsapi", eventId, parsed.rows, retrievedAt);
+    eventCount++;
+  }
+
+  for (const target of upcoming.slice(0, propLimit)) {
+    const props = await oddsApiFetch(
+      `/v4/sports/baseball_mlb/events/${target.sourceEventId}/odds/?regions=us,us2&markets=pitcher_strikeouts,batter_total_bases,batter_hits&oddsFormat=american`,
+      key,
+    );
+    creditsRemaining = props.remaining ?? creditsRemaining;
+    if (props.status !== 200) continue;
+    try {
+      const parsedProps = parseOddsApiEvents([JSON.parse(props.body)]);
+      for (const parsed of parsedProps) {
+        if (parsed.rows.length === 0) continue;
+        const eventId = await upsertEvent(parsed.homeTeam, parsed.awayTeam, parsed.startTime, "scheduled");
+        rows += await storeRows("theoddsapi", eventId, parsed.rows, retrievedAt);
+      }
+    } catch {
+      // skip malformed prop payloads
+    }
+  }
+
+  return { rows, events: eventCount, creditsRemaining };
 }
 
 /** Raw preview of one event's odds for parser debugging. One API request. */

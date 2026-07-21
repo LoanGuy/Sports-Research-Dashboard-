@@ -15,7 +15,7 @@ const BASE = "https://api.the-odds-api.com";
 
 const KEY_ENV_NAMES = ["THEODDSAPI_KEY", "THE_ODDS_API_KEY", "ODDS_API_KEY", "THEODDS_API_KEY"];
 
-function findKey(): { name: string; key: string } | null {
+export function findOddsApiKey(): { name: string; key: string } | null {
   for (const name of KEY_ENV_NAMES) {
     const key = process.env[name];
     if (key) return { name, key };
@@ -95,7 +95,7 @@ function collectBooks(events: OddsApiEvent[]): Map<string, Set<string>> {
 
 export async function runOddsApiCheck(): Promise<OddsApiReport> {
   const ranAt = new Date().toISOString();
-  const found = findKey();
+  const found = findOddsApiKey();
   if (!found) {
     return {
       provider: "theoddsapi",
