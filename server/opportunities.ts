@@ -190,6 +190,12 @@ export function buildOpportunities(
           ? "Over"
           : "Under";
       const fairForSide = side === "over" ? consensusProb : 1 - consensusProb;
+      // Report the consensus for the side actually surfaced, so the card's
+      // "Market X%" lines up with the offered price and break-even number.
+      const sideConsensus: Consensus =
+        side === "over"
+          ? consensus
+          : { ...consensus, fairProb: 1 - consensusProb, lowProb: 1 - high, highProb: 1 - low };
       const mGrade = marketGrade(best.edgePts);
       const dGrade = confidenceGrade(consensus.sourceCount, disagreement);
 
@@ -232,7 +238,7 @@ export function buildOpportunities(
         offeredOdds: best.odds,
         payoutNote: null,
         breakEvenProb: best.breakEven,
-        consensus,
+        consensus: sideConsensus,
         edgePts: Number(best.edgePts.toFixed(1)),
         sideFairProb: fairForSide,
         grade: mGrade,

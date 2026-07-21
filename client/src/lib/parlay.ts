@@ -29,8 +29,8 @@ function emit(): void {
 export function addLeg(o: Opportunity): void {
   if (o.offeredOdds == null) return;
   if (legs.some((l) => l.id === o.id)) return;
-  const fairProb =
-    o.sideFairProb ?? (o.side === "Under" ? 1 - o.consensus.fairProb : o.consensus.fairProb);
+  // consensus.fairProb is already reported for the surfaced side.
+  const fairProb = o.sideFairProb ?? o.consensus.fairProb;
   legs = [
     ...legs,
     {
