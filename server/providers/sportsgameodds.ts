@@ -1,15 +1,18 @@
 /**
- * SportsGameOdds provider verification.
+ * SportsGameOdds provider verification (battery v2).
  *
- * Runs a small battery of real API calls to establish what the account's
- * plan actually covers — bookmaker list (Hard Rock Bet? PrizePicks? Novig?),
- * sports/leagues, and a sample odds pull — per the project rule that
- * coverage claims only count when verified against actual API responses.
+ * v1 findings (2026-07-21): header auth works; sports list includes
+ * baseball/tennis/basketball; leagues include MLB and NCAAB (no ATP/WTA
+ * strings); /v2/bookmakers/ does not exist (404); MLB events carry player
+ * props and live data, but the free tier withholds many bookmaker odds
+ * ("upgrade" notice in payload).
  *
- * Designed to be gentle with the free tier's rate limit (10 requests/min):
- * the full battery is at most 7 sequential requests.
+ * v2 therefore parses odds payloads server-side and reports: the actual
+ * bookmaker IDs present in odds objects, the market/stat types offered,
+ * plan-limit notices, and tennis + NCAAB probes. At most 5 provider
+ * requests per run (free tier allows 10/min).
  *
- * The API key comes from SPORTSGAMEODDS_API_KEY and is never echoed back.
+ * The API key comes from SPORTSGAMEODDS_API_KEY and is never echoed.
  */
 
 const BASE = "https://api.sportsgameodds.com";
@@ -20,47 +23,133 @@ export interface CheckResult {
   status: number | null;
   ok: boolean;
   summary: string;
-  /** Truncated raw response so unexpected shapes can be inspected. */
-  sample: string;
+  detail: Record<string, unknown>;
 }
 
 export interface ProviderCheckReport {
   provider: "sportsgameodds";
   configured: boolean;
-  authStyle: "header" | "query" | "unknown" | null;
   ranAt: string;
   results: CheckResult[];
   note: string;
 }
 
-async function call(
-  path: string,
-  key: string,
-  style: "header" | "query",
-): Promise<{ status: number | null; body: string }> {
-  const url = new URL(path, BASE);
-  const headers: Record<string, string> = { Accept: "application/json" };
-  if (style === "header") {
-    headers["X-Api-Key"] = key;
-  } else {
-    url.searchParams.set("apiKey", key);
-  }
+async function call(path: string, key: string): Promise<{ status: number | null; body: string }> {
   try {
-    const res = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
-    const body = await res.text();
-    return { status: res.status, body };
+    const res = await fetch(new URL(path, BASE), {
+      headers: { Accept: "application/json", "X-Api-Key": key },
+      signal: AbortSignal.timeout(20000),
+    });
+    return { status: res.status, body: await res.text() };
   } catch (error) {
     return { status: null, body: `NETWORK ERROR: ${String(error)}` };
   }
 }
 
-function contains(haystack: string, needles: string[]): string[] {
-  const lower = haystack.toLowerCase();
-  return needles.filter((n) => lower.includes(n.toLowerCase()));
+function tryParse(body: string): unknown | null {
+  try {
+    return JSON.parse(body);
+  } catch {
+    return null;
+  }
 }
 
-function truncate(text: string, max = 900): string {
-  return text.length > max ? `${text.slice(0, max)}…[truncated ${text.length} chars total]` : text;
+/** Walk a parsed payload collecting bookmaker IDs (keys of byBookmaker objects). */
+function collectBookmakers(node: unknown, found: Set<string>): void {
+  if (Array.isArray(node)) {
+    for (const item of node) collectBookmakers(item, found);
+    return;
+  }
+  if (node && typeof node === "object") {
+    for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+      if (key === "byBookmaker" && value && typeof value === "object") {
+        for (const book of Object.keys(value as Record<string, unknown>)) found.add(book);
+      }
+      collectBookmakers(value, found);
+    }
+  }
+}
+
+/** Collect notices (plan-limit messages) anywhere in the payload. */
+function collectNotices(node: unknown, found: Set<string>): void {
+  if (Array.isArray(node)) {
+    for (const item of node) collectNotices(item, found);
+    return;
+  }
+  if (node && typeof node === "object") {
+    for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+      if (key === "notice" && typeof value === "string") found.add(value);
+      collectNotices(value, found);
+    }
+  }
+}
+
+/** Collect statIDs (first segment of oddID keys in event.odds objects). */
+function collectStatIds(events: unknown[]): { statIds: string[]; oddsCount: number } {
+  const statIds = new Set<string>();
+  let oddsCount = 0;
+  for (const event of events) {
+    const odds = (event as { odds?: Record<string, unknown> }).odds;
+    if (odds && typeof odds === "object") {
+      for (const oddId of Object.keys(odds)) {
+        oddsCount++;
+        statIds.add(oddId.split("-")[0]);
+      }
+    }
+  }
+  return { statIds: [...statIds].sort(), oddsCount };
+}
+
+function targetBooks(bookIds: Set<string>): string {
+  const hits: string[] = [];
+  for (const id of bookIds) {
+    const lower = id.toLowerCase();
+    if (lower.includes("hardrock") || lower.includes("hard_rock")) hits.push(`${id} (Hard Rock)`);
+    if (lower.includes("prizepicks") || lower.includes("prize_picks")) hits.push(`${id} (PrizePicks)`);
+    if (lower.includes("novig")) hits.push(`${id} (Novig)`);
+  }
+  return hits.length > 0 ? hits.join(", ") : "NONE of Hard Rock / PrizePicks / Novig";
+}
+
+function analyzeEvents(check: string, path: string, status: number | null, body: string): CheckResult {
+  const parsed = tryParse(body);
+  if (status !== 200 || !parsed) {
+    return {
+      check,
+      path,
+      status,
+      ok: false,
+      summary: "Request failed or response not JSON.",
+      detail: { sample: body.slice(0, 600) },
+    };
+  }
+  const data = (parsed as { data?: unknown[] }).data ?? [];
+  const books = new Set<string>();
+  const notices = new Set<string>();
+  collectBookmakers(parsed, books);
+  collectNotices(parsed, notices);
+  const { statIds, oddsCount } = collectStatIds(data);
+  const leagues = [
+    ...new Set(data.map((e) => (e as { leagueID?: string }).leagueID).filter(Boolean)),
+  ];
+  return {
+    check,
+    path,
+    status,
+    ok: true,
+    summary: `${data.length} event(s), ${oddsCount} odds entries, ${books.size} bookmaker IDs. Target platforms: ${targetBooks(books)}`,
+    detail: {
+      leaguesSeen: leagues,
+      bookmakerIds: [...books].sort(),
+      statIds,
+      planNotices: [...notices],
+      liveDataMarkers: {
+        hasScores: body.includes('"score"'),
+        hasPeriods: body.includes("currentPeriodID"),
+        mentionsFouls: body.toLowerCase().includes("foul"),
+      },
+    },
+  };
 }
 
 export async function runSportsGameOddsCheck(): Promise<ProviderCheckReport> {
@@ -70,7 +159,6 @@ export async function runSportsGameOddsCheck(): Promise<ProviderCheckReport> {
     return {
       provider: "sportsgameodds",
       configured: false,
-      authStyle: null,
       ranAt,
       results: [],
       note: "SPORTSGAMEODDS_API_KEY is not set. Add it as an environment variable and redeploy.",
@@ -79,95 +167,48 @@ export async function runSportsGameOddsCheck(): Promise<ProviderCheckReport> {
 
   const results: CheckResult[] = [];
 
-  // 1. Establish which auth style the key accepts (header first, query fallback).
-  let authStyle: "header" | "query" | "unknown" = "header";
-  let probe = await call("/v2/sports/", key, "header");
-  if (probe.status === 401 || probe.status === 403) {
-    const retry = await call("/v2/sports/", key, "query");
-    if (retry.status === 200) {
-      authStyle = "query";
-      probe = retry;
-    } else {
-      authStyle = "unknown";
-    }
-  }
-
-  const sportsFound = contains(probe.body, ["baseball", "tennis", "basketball"]);
+  // 1. Leagues — full list this time, to find how tennis is keyed.
+  const leagues = await call("/v2/leagues/", key);
+  const leaguesParsed = tryParse(leagues.body) as { data?: { leagueID?: string; sportID?: string }[] } | null;
+  const leagueIds = leaguesParsed?.data?.map((l) => `${l.leagueID} (${l.sportID})`) ?? [];
   results.push({
-    check: "sports list (auth probe)",
-    path: "/v2/sports/",
-    status: probe.status,
-    ok: probe.status === 200,
-    summary:
-      probe.status === 200
-        ? `OK. Target sports present: ${sportsFound.join(", ") || "none found in response"}`
-        : `Failed (auth style: ${authStyle}). See sample.`,
-    sample: truncate(probe.body),
-  });
-
-  const style: "header" | "query" = authStyle === "query" ? "query" : "header";
-
-  // 2. Bookmaker list — the headline check: Hard Rock Bet / PrizePicks / Novig.
-  const bookmakers = await call("/v2/bookmakers/", key, style);
-  const targetBooks = contains(bookmakers.body, [
-    "hard rock",
-    "hardrock",
-    "prizepicks",
-    "prize picks",
-    "novig",
-  ]);
-  results.push({
-    check: "bookmaker list — Hard Rock / PrizePicks / Novig",
-    path: "/v2/bookmakers/",
-    status: bookmakers.status,
-    ok: bookmakers.status === 200,
-    summary:
-      bookmakers.status === 200
-        ? `OK. Target platforms found in list: ${targetBooks.join(", ") || "NONE of the three target platforms"}`
-        : "Failed. See sample.",
-    sample: truncate(bookmakers.body, 2000),
-  });
-
-  // 3. Leagues — MLB, NCAAB, ATP/WTA coverage.
-  const leagues = await call("/v2/leagues/", key, style);
-  const leaguesFound = contains(leagues.body, ["MLB", "NCAAB", "ATP", "WTA"]);
-  results.push({
-    check: "league list — MLB / NCAAB / ATP / WTA",
+    check: "full league list",
     path: "/v2/leagues/",
     status: leagues.status,
     ok: leagues.status === 200,
     summary:
       leagues.status === 200
-        ? `OK. Target leagues present: ${leaguesFound.join(", ") || "none found in response"}`
-        : "Failed. See sample.",
-    sample: truncate(leagues.body),
+        ? `${leagueIds.length} leagues on this plan.`
+        : "Failed.",
+    detail: { leagueIds, sample: leagues.status === 200 ? undefined : leagues.body.slice(0, 600) },
   });
 
-  // 4. Sample MLB event with odds — proves odds access and shows the shape.
-  const mlbEvents = await call("/v2/events/?leagueID=MLB&oddsAvailable=true&limit=1", key, style);
-  results.push({
-    check: "sample MLB event with odds",
-    path: "/v2/events/?leagueID=MLB&oddsAvailable=true&limit=1",
-    status: mlbEvents.status,
-    ok: mlbEvents.status === 200,
-    summary:
-      mlbEvents.status === 200
-        ? `OK. Response length ${mlbEvents.body.length} chars. Player-prop markers present: ${
-            contains(mlbEvents.body, ["strikeout", "total bases", "hits", "player"]).join(", ") ||
-            "none obvious"
-          }`
-        : "Failed. See sample.",
-    sample: truncate(mlbEvents.body, 2500),
-  });
+  // 2. MLB events with odds — bookmaker IDs, prop stat types, plan notices.
+  const mlb = await call("/v2/events/?leagueID=MLB&oddsAvailable=true&limit=2", key);
+  results.push(
+    analyzeEvents("MLB events + odds analysis", "/v2/events/?leagueID=MLB&oddsAvailable=true&limit=2", mlb.status, mlb.body),
+  );
+
+  // 3. Tennis probe by sportID (league list may not use ATP/WTA).
+  const tennis = await call("/v2/events/?sportID=TENNIS&oddsAvailable=true&limit=2", key);
+  results.push(
+    analyzeEvents("Tennis events + odds analysis", "/v2/events/?sportID=TENNIS&oddsAvailable=true&limit=2", tennis.status, tennis.body),
+  );
+
+  // 4. College basketball probe (NCAAB confirmed in league list).
+  const ncaab = await call("/v2/events/?leagueID=NCAAB&limit=2", key);
+  results.push(
+    analyzeEvents("NCAAB events analysis (live fields, fouls?)", "/v2/events/?leagueID=NCAAB&limit=2", ncaab.status, ncaab.body),
+  );
 
   return {
     provider: "sportsgameodds",
     configured: true,
-    authStyle,
     ranAt,
     results,
     note:
-      "This report contains raw provider responses (truncated) and no credentials. " +
-      "Findings only count as verified when this battery succeeds — marketing pages do not.",
+      "Battery v2: bookmaker coverage is read from byBookmaker keys inside real odds objects " +
+      "(the /v2/bookmakers/ endpoint does not exist). planNotices show what the current tier withholds. " +
+      "No credentials are included in this report.",
   };
 }
