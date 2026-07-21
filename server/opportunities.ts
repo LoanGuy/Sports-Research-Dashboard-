@@ -74,6 +74,10 @@ export function buildOpportunities(
   const groups = new Map<string, MarketRecord[]>();
   for (const row of rows) {
     if (row.overOdds == null || row.underOdds == null || row.eventId == null) continue;
+    // Live in-progress games are excluded: collected odds are ~10 minutes
+    // delayed on the current plan, and a delayed price on a moving game is
+    // not an edge — it is stale information. Pregame markets only.
+    if (row.isLive) continue;
     const key = [row.eventId, row.marketType, row.playerId ?? "", row.line ?? "", row.marketPeriod].join("|");
     const list = groups.get(key) ?? [];
     list.push(row);
@@ -318,6 +322,7 @@ export function buildConsensusMarkets(
   const groups = new Map<string, MarketRecord[]>();
   for (const row of rows) {
     if (row.overOdds == null || row.underOdds == null || row.eventId == null) continue;
+    if (row.isLive) continue; // pregame only — see buildOpportunities
     const key = [row.eventId, row.marketType, row.playerId ?? "", row.line ?? "", row.marketPeriod].join("|");
     const list = groups.get(key) ?? [];
     list.push(row);
