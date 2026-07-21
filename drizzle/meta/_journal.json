@@ -15,6 +15,13 @@
       "when": 1784594333558,
       "tag": "0001_mature_cyclops",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784659428719,
+      "tag": "0002_brave_norman_osborn",
+      "breakpoints": true
     }
   ]
 }

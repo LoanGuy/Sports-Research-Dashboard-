@@ -4,7 +4,8 @@ import { requireAuth, setupAuth } from "./auth";
 import { isDbConfigured } from "./db";
 import { runSportsGameOddsCheck } from "./providers/sportsgameodds";
 import { collectionConfigured, previewRaw, runCollection } from "./collect";
-import { getLiveFeed } from "./opportunities";
+import { getConsensusFeed, getLiveFeed } from "./opportunities";
+import { betInputSchema, createBet, deleteBet, listBets, seedInitialBets, updateBet } from "./bets";
 
 export function registerRoutes(_server: Server, app: Express) {
   setupAuth(app);
@@ -43,6 +44,69 @@ export function registerRoutes(_server: Server, app: Express) {
   app.get("/api/collect/preview", async (_req, res) => {
     try {
       res.json(await previewRaw());
+    } catch (error) {
+      res.status(500).json({ error: String(error) });
+    }
+  });
+
+  /** All consensus markets from the newest batch (powers the price check). */
+  app.get("/api/consensus", async (_req, res) => {
+    try {
+      res.json(await getConsensusFeed());
+    } catch (error) {
+      res.status(500).json({ error: String(error) });
+    }
+  });
+
+  // ---- Bet journal ----
+  app.get("/api/bets", async (_req, res) => {
+    try {
+      if (!isDbConfigured()) return res.status(503).json({ error: "Database not configured" });
+      res.json(await listBets());
+    } catch (error) {
+      res.status(500).json({ error: String(error) });
+    }
+  });
+
+  app.post("/api/bets", async (req, res) => {
+    try {
+      if (!isDbConfigured()) return res.status(503).json({ error: "Database not configured" });
+      const parsed = betInputSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      res.status(201).json(await createBet(parsed.data));
+    } catch (error) {
+      res.status(500).json({ error: String(error) });
+    }
+  });
+
+  app.patch("/api/bets/:id", async (req, res) => {
+    try {
+      if (!isDbConfigured()) return res.status(503).json({ error: "Database not configured" });
+      const parsed = betInputSchema.partial().safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const updated = await updateBet(Number(req.params.id), parsed.data);
+      if (!updated) return res.status(404).json({ error: "Not found" });
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: String(error) });
+    }
+  });
+
+  app.delete("/api/bets/:id", async (req, res) => {
+    try {
+      if (!isDbConfigured()) return res.status(503).json({ error: "Database not configured" });
+      await deleteBet(Number(req.params.id));
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: String(error) });
+    }
+  });
+
+  /** Idempotent: loads the 15 chat-analyzed tickets when the journal is empty. */
+  app.get("/api/bets/seed-initial", async (_req, res) => {
+    try {
+      if (!isDbConfigured()) return res.status(503).json({ error: "Database not configured" });
+      res.json(await seedInitialBets());
     } catch (error) {
       res.status(500).json({ error: String(error) });
     }

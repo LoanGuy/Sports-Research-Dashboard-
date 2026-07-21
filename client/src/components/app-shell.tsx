@@ -1,6 +1,6 @@
 import { useEffect, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { Activity, Calculator, Info, LineChart, Settings } from "lucide-react";
+import { Activity, Calculator, Info, LineChart, NotebookPen, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DISCLAIMER } from "@shared/types";
 import { MOCK_DATA_NOTICE } from "@/data/opportunities";
@@ -13,6 +13,7 @@ import {
 const navItems = [
   { href: "/", label: "Research", icon: LineChart },
   { href: "/live", label: "Live", icon: Activity },
+  { href: "/journal", label: "Journal", icon: NotebookPen },
   { href: "/calculators", label: "Calculators", icon: Calculator },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
@@ -103,7 +104,7 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
 
       {/* Bottom tab bar: phones only. */}
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 backdrop-blur md:hidden">
-        <div className="mx-auto grid max-w-xl grid-cols-4">
+        <div className="mx-auto grid max-w-xl grid-cols-5">
           {navItems.map((item) => {
             const active = isActive(location, item.href);
             const Icon = item.icon;

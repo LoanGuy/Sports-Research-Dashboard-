@@ -252,20 +252,15 @@ export interface LiveFeed {
   reason?: string;
 }
 
-export async function getLiveFeed(): Promise<LiveFeed> {
-  const generatedAt = new Date().toISOString();
-  if (!isDbConfigured()) {
-    return { origin: "none", generatedAt, count: 0, opportunities: [], reason: "Database not configured" };
-  }
+async function getLatestRowsAndEvents(): Promise<{ rows: MarketRecord[]; eventById: Map<number, Event> } | null> {
+  if (!isDbConfigured()) return null;
   const db = getDb();
   const newest = await db
     .select({ retrievedAt: marketRecords.retrievedAt })
     .from(marketRecords)
     .orderBy(desc(marketRecords.retrievedAt))
     .limit(1);
-  if (newest.length === 0) {
-    return { origin: "none", generatedAt, count: 0, opportunities: [], reason: "No collected data yet" };
-  }
+  if (newest.length === 0) return null;
   const cutoff = new Date(newest[0].retrievedAt.getTime() - 5 * 60 * 1000);
   const rows = await db.select().from(marketRecords).where(gt(marketRecords.retrievedAt, cutoff));
 
@@ -275,7 +270,111 @@ export async function getLiveFeed(): Promise<LiveFeed> {
     const found = await db.select().from(events).where(eq(events.id, id)).limit(1);
     if (found.length > 0) eventById.set(id, found[0]);
   }
+  return { rows, eventById };
+}
 
-  const opportunities = buildOpportunities(rows, eventById, new Date());
+export async function getLiveFeed(): Promise<LiveFeed> {
+  const generatedAt = new Date().toISOString();
+  const latest = await getLatestRowsAndEvents();
+  if (!latest) {
+    return {
+      origin: "none",
+      generatedAt,
+      count: 0,
+      opportunities: [],
+      reason: isDbConfigured() ? "No collected data yet" : "Database not configured",
+    };
+  }
+  const opportunities = buildOpportunities(latest.rows, latest.eventById, new Date());
   return { origin: "live", generatedAt, count: opportunities.length, opportunities };
+}
+
+/**
+ * All consensus markets from the newest batch (no edge threshold) — powers
+ * the manual price check: the user enters a Hard Rock (or any book) price
+ * and compares it against this fair-probability estimate.
+ */
+export interface ConsensusMarket {
+  key: string;
+  eventName: string;
+  eventTime: string;
+  market: string;
+  playerName: string | null;
+  line: number | null;
+  period: string;
+  sourceCount: number;
+  fairOverProb: number;
+  lowProb: number;
+  highProb: number;
+  disagreement: "low" | "moderate" | "high";
+  lastUpdated: string;
+}
+
+export function buildConsensusMarkets(
+  rows: MarketRecord[],
+  eventById: Map<number, Event>,
+  now: Date,
+): ConsensusMarket[] {
+  const groups = new Map<string, MarketRecord[]>();
+  for (const row of rows) {
+    if (row.overOdds == null || row.underOdds == null || row.eventId == null) continue;
+    const key = [row.eventId, row.marketType, row.playerId ?? "", row.line ?? "", row.marketPeriod].join("|");
+    const list = groups.get(key) ?? [];
+    list.push(row);
+    groups.set(key, list);
+  }
+
+  const markets: ConsensusMarket[] = [];
+  for (const [key, groupRows] of Array.from(groups.entries())) {
+    const byBook = new Map<string, MarketRecord>();
+    for (const row of groupRows) byBook.set(bookKey(row), row);
+    const quotes = Array.from(byBook.values());
+    if (quotes.length < 3) continue;
+
+    const fairOverProbs: number[] = [];
+    for (const quote of quotes) {
+      try {
+        fairOverProbs.push(noVigFromAmerican(quote.overOdds!, quote.underOdds!).fairProbs[0]);
+      } catch {
+        // skip malformed odds
+      }
+    }
+    if (fairOverProbs.length < 3) continue;
+
+    const event = eventById.get(quotes[0].eventId!);
+    if (!event) continue;
+    const range = Math.max(...fairOverProbs) - Math.min(...fairOverProbs);
+    markets.push({
+      key,
+      eventName: `${event.awayTeam} @ ${event.homeTeam}`,
+      eventTime: formatEventTime(event.startTime),
+      market: quotes[0].marketType,
+      playerName: quotes[0].playerName,
+      line: quotes[0].line,
+      period: quotes[0].marketPeriod === "game" ? "Full game" : quotes[0].marketPeriod,
+      sourceCount: fairOverProbs.length,
+      fairOverProb: median(fairOverProbs),
+      lowProb: Math.min(...fairOverProbs),
+      highProb: Math.max(...fairOverProbs),
+      disagreement: range < 0.03 ? "low" : range < 0.06 ? "moderate" : "high",
+      lastUpdated: `${ageMinutes(quotes[0].retrievedAt, now)} min ago`,
+    });
+  }
+
+  markets.sort((a, b) => a.eventName.localeCompare(b.eventName) || a.market.localeCompare(b.market));
+  return markets;
+}
+
+export async function getConsensusFeed(): Promise<{ origin: "live" | "none"; generatedAt: string; markets: ConsensusMarket[]; reason?: string }> {
+  const generatedAt = new Date().toISOString();
+  const latest = await getLatestRowsAndEvents();
+  if (!latest) {
+    return {
+      origin: "none",
+      generatedAt,
+      markets: [],
+      reason: isDbConfigured() ? "No collected data yet" : "Database not configured",
+    };
+  }
+  return { origin: "live", generatedAt, markets: buildConsensusMarkets(latest.rows, latest.eventById, new Date()) };
 }

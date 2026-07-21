@@ -101,6 +101,35 @@ export const auditLog = pgTable(
   (t) => [index("audit_log_at_idx").on(t.at)],
 );
 
+/**
+ * Personal bet journal. Every ticket — wins AND losses — so hit rates and
+ * ROI can be computed per category with honest sample sizes. Legs are
+ * stored as JSON: [{ description, market, oddsAmerican, line, result }].
+ */
+export const bets = pgTable(
+  "bets",
+  {
+    id: serial("id").primaryKey(),
+    placedOn: text("placed_on"), // "YYYY-MM-DD" or null when unknown
+    platform: text("platform").notNull().default("other"),
+    betType: text("bet_type").notNull(), // "straight" | "parlay" | "sgp"
+    legCount: integer("leg_count").notNull().default(1),
+    oddsAmerican: doublePrecision("odds_american"),
+    stake: doublePrecision("stake").notNull(),
+    payout: doublePrecision("payout").notNull().default(0),
+    result: text("result").notNull().default("pending"), // won|lost|push|pending
+    boostPct: doublePrecision("boost_pct"),
+    bonusBet: boolean("bonus_bet").notNull().default(false),
+    notes: text("notes"),
+    legs: jsonb("legs").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("bets_placed_idx").on(t.placedOn)],
+);
+
+export type Bet = typeof bets.$inferSelect;
+export type NewBet = typeof bets.$inferInsert;
+
 export type Event = typeof events.$inferSelect;
 export type NewEvent = typeof events.$inferInsert;
 export type MarketRecord = typeof marketRecords.$inferSelect;

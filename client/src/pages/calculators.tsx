@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Input } from "@/components/ui/input";
@@ -486,18 +487,188 @@ function ExchangeCalculator() {
   );
 }
 
+interface ConsensusMarket {
+  key: string;
+  eventName: string;
+  eventTime: string;
+  market: string;
+  playerName: string | null;
+  line: number | null;
+  period: string;
+  sourceCount: number;
+  fairOverProb: number;
+  lowProb: number;
+  highProb: number;
+  disagreement: string;
+  lastUpdated: string;
+}
+
+interface ConsensusFeed {
+  origin: "live" | "none";
+  markets: ConsensusMarket[];
+  reason?: string;
+}
+
+/**
+ * Price check: enter the odds a book (e.g. Hard Rock) is offering and
+ * compare against the live multi-book no-vig consensus before placing.
+ */
+function PriceCheckCalculator() {
+  const [selectedKey, setSelectedKey] = useState("");
+  const [side, setSide] = useState<"over" | "under">("over");
+  const [odds, setOdds] = useState("");
+
+  const { data: feed } = useQuery<ConsensusFeed>({
+    queryKey: ["/api/consensus"],
+    queryFn: async () => {
+      try {
+        const res = await fetch("/api/consensus");
+        if (!res.ok) throw new Error(String(res.status));
+        return (await res.json()) as ConsensusFeed;
+      } catch {
+        return { origin: "none", markets: [] };
+      }
+    },
+    staleTime: 60_000,
+  });
+
+  const markets = feed?.markets ?? [];
+  const selected = markets.find((m) => m.key === selectedKey) ?? null;
+
+  const result = useMemo(() => {
+    if (!selected) return null;
+    const n = parseNum(odds);
+    if (n === null) return null;
+    let breakEven: number;
+    let decimal: number;
+    try {
+      breakEven = americanToImpliedProb(n);
+      decimal = americanToDecimal(n);
+    } catch {
+      return null;
+    }
+    const fair = side === "over" ? selected.fairOverProb : 1 - selected.fairOverProb;
+    if (fair <= 0 || fair >= 1) return null;
+    const edge = fair - breakEven;
+    const ev = expectedValue(fair, decimal);
+    const k = kelly(fair, decimal);
+    return { breakEven, fair, edge, ev, k };
+  }, [selected, side, odds]);
+
+  const selectClass =
+    "h-11 w-full rounded-md border border-border bg-card px-2 text-[14px] text-foreground";
+
+  if (feed?.origin !== "live" || markets.length === 0) {
+    return (
+      <div className="space-y-3">
+        <p className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-[13px] leading-snug text-amber-400">
+          No live consensus data available yet ({feed?.reason ?? "not loaded"}). Run a collection
+          (Research feed pulls it automatically once configured), or use the Vig remover tab to
+          check a price by entering both sides manually.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-[13px] leading-snug text-muted-foreground">
+        Pick a market from the latest collection, then enter the price your sportsbook (for
+        example Hard Rock) is offering. The comparison uses the median no-vig probability across
+        the collected books.
+      </p>
+
+      <div className="space-y-1">
+        <Label className="text-[12px] text-muted-foreground">Market ({markets.length} available)</Label>
+        <select value={selectedKey} onChange={(e) => setSelectedKey(e.target.value)} className={selectClass} data-testid="select-market">
+          <option value="">Choose a market…</option>
+          {markets.map((m) => (
+            <option key={m.key} value={m.key}>
+              {m.eventName} — {m.playerName ? `${m.playerName} — ` : ""}{m.market}
+              {m.line != null ? ` ${m.line}` : ""} ({m.sourceCount} books)
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {selected ? (
+        <>
+          <ResultCard title="Market consensus">
+            <ResultRow label="Fair probability — Over" value={formatProb(selected.fairOverProb)} />
+            <ResultRow label="Fair probability — Under" value={formatProb(1 - selected.fairOverProb)} />
+            <ResultRow label="Books compared" value={String(selected.sourceCount)} />
+            <ResultRow label="Range (Over)" value={`${formatProb(selected.lowProb)} – ${formatProb(selected.highProb)}`} />
+            <ResultRow label="Disagreement" value={selected.disagreement} />
+            <ResultRow label="Collected" value={selected.lastUpdated} />
+          </ResultCard>
+
+          <div className="grid grid-cols-2 gap-2.5">
+            <div className="space-y-1">
+              <Label className="text-[12px] text-muted-foreground">Side you are checking</Label>
+              <div className="flex gap-1">
+                {(["over", "under"] as const).map((sd) => (
+                  <button
+                    key={sd}
+                    onClick={() => setSide(sd)}
+                    className={
+                      "h-11 flex-1 rounded-md border text-[14px] font-semibold capitalize " +
+                      (side === sd
+                        ? "border-primary/50 bg-primary/15 text-foreground"
+                        : "border-border bg-card text-muted-foreground hover-elevate")
+                    }
+                  >
+                    {sd}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <Field label="Your book's odds (American)" value={odds} onChange={setOdds} placeholder="-110" />
+          </div>
+
+          {result ? (
+            <>
+              <ResultCard title="Your price vs the market">
+                <ResultRow label="Break-even at your price" value={formatProb(result.breakEven)} />
+                <ResultRow label={`Market estimate (${side})`} value={formatProb(result.fair)} />
+                <ResultRow
+                  label="Estimated difference"
+                  value={formatSignedPct(result.edge)}
+                  tone={result.edge > 0 ? "good" : "bad"}
+                />
+                <ResultRow label="Expected value per $1" value={formatSignedPct(result.ev)} tone={result.ev > 0 ? "good" : "bad"} />
+                <ResultRow label="Quarter Kelly" value={formatProb(result.k.quarter)} />
+              </ResultCard>
+              <p className="text-[12px] leading-4 text-muted-foreground">
+                {result.edge > 0.015
+                  ? "Your book's price is better than the market estimate. Remember collected odds are ~10 minutes delayed and matchup context is not yet analyzed."
+                  : "Your book's price is not meaningfully better than the market estimate. A parlay of legs like this pays less than the risk it carries."}
+              </p>
+            </>
+          ) : (
+            <p className="text-[13px] text-muted-foreground">Enter the odds your book is offering to compare.</p>
+          )}
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 export default function CalculatorsPage() {
   return (
     <AppShell title="Calculators">
       <div className="mx-auto w-full max-w-2xl px-4 pt-3">
         <Tabs defaultValue="vig">
-          <TabsList className="grid h-11 w-full grid-cols-3">
+          <TabsList className="grid h-11 w-full grid-cols-4">
             <TabsTrigger value="vig" className="text-[13px]">Vig remover</TabsTrigger>
+            <TabsTrigger value="price" className="text-[13px]">Price check</TabsTrigger>
             <TabsTrigger value="entry" className="text-[13px]">PrizePicks</TabsTrigger>
             <TabsTrigger value="exchange" className="text-[13px]">NoVig</TabsTrigger>
           </TabsList>
           <TabsContent value="vig" className="mt-3">
             <VigCalculator />
+          </TabsContent>
+          <TabsContent value="price" className="mt-3">
+            <PriceCheckCalculator />
           </TabsContent>
           <TabsContent value="entry" className="mt-3">
             <EntryCalculator />
