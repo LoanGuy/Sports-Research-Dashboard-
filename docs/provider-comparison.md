@@ -21,24 +21,24 @@ Status legend: ✅ verified via API response · 📝 written confirmation ·
 
 | Capability | OpticOdds | SportsGameOdds | The Odds API | SportsDataIO | Sportradar | Genius Sports | Goalserve | API-Basketball |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Hard Rock Bet odds | ❌ free tier | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
-| PrizePicks projections | ❌ free tier | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
-| NoVig markets | ❌ free tier | ❓ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
-| Major sportsbook odds | ✅ 9 books (free) | Ⓜ️ 80+ | Ⓜ️ ~40 | ⬜ | ⬜ | ⬜ | Ⓜ️ 50+ | ⬜ |
-| MLB player props | ✅ deep | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | Ⓜ️ | ⬜ |
-| Tennis player props | ❌ free tier | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
-| CBB live scores | ❓ fields seen | ⬜ | ⬜ | Ⓜ️ | Ⓜ️ | ⬜ | ⬜ | ⬜ |
+| Hard Rock Bet odds | ⬜ | ❌ free tier | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| PrizePicks projections | ❓ | ❌ free tier | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| NoVig markets | ❓ | ❌ free tier | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| Major sportsbook odds | Ⓜ️ 100+ | ✅ 9 books (free) | Ⓜ️ ~40 | ⬜ | ⬜ | ⬜ | Ⓜ️ 50+ | ⬜ |
+| MLB player props | Ⓜ️ | ✅ deep | ⬜ | ⬜ | ⬜ | ⬜ | Ⓜ️ | ⬜ |
+| Tennis player props | ⬜ | ❌ free tier | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| CBB live scores | ⬜ | ❓ fields seen | ⬜ | Ⓜ️ | Ⓜ️ | ⬜ | ⬜ | ⬜ |
 | CBB team fouls (live) | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 | Opening lines | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
-| Current lines | ✅ | ❓ | ❓ | ⬜ | ⬜ | ⬜ | ❓ | ⬜ |
+| Current lines | ❓ | ✅ | ❓ | ⬜ | ⬜ | ⬜ | ❓ | ⬜ |
 | Historical line movement | Ⓜ️ | ⬜ | Ⓜ️ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
-| Live odds | ✅ observed | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ❓ 1s push | ⬜ |
+| Live odds | Ⓜ️ | ✅ observed | ⬜ | ⬜ | ⬜ | ⬜ | ❓ 1s push | ⬜ |
 | Confirmed lineups | Ⓜ️ | ⬜ | ⬜ | Ⓜ️ | Ⓜ️ | ⬜ | ⬜ | ⬜ |
 | Injuries | Ⓜ️ | ⬜ | ⬜ | Ⓜ️ | ⬜ | ⬜ | ⬜ | ⬜ |
 | Starting pitchers | ⬜ | ⬜ | ⬜ | Ⓜ️ | ⬜ | ⬜ | ⬜ | ⬜ |
 | Pitch counts | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
-| API update frequency | ❓ per tier | ❓ per tier | ⬜ | ⬜ | ⬜ | ⬜ | ❓ 30s pregame | ⬜ |
-| API rate limits | ✅ 10/min ok | ❓ per tier | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| API update frequency | Ⓜ️ | ❓ per tier | ⬜ | ⬜ | ⬜ | ⬜ | ❓ 30s pregame | ⬜ |
+| API rate limits | ⬜ | ✅ 10/min ok | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 | Commercial-use terms | ⬜ | ❓ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 | Pricing | ⬜ none public | ❓ $0/$99+/$499 | ❓ $0/~$30+ | ⬜ | ⬜ | ⬜ | ❓ $500–800/mo | ⬜ |
 
