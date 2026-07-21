@@ -48,6 +48,7 @@ interface JournalData {
   bets: Bet[];
   summary: {
     overall: CategoryRecord;
+    byPlatform: CategoryRecord[];
     byBetType: CategoryRecord[];
     byLegCount: CategoryRecord[];
     byFlags: CategoryRecord[];
@@ -310,6 +311,13 @@ export default function JournalPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/bets"] }),
   });
 
+  const seedPp = useMutation({
+    mutationFn: async () => {
+      await apiRequest("GET", "/api/bets/seed-prizepicks");
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/bets"] }),
+  });
+
   const deleteBet = useMutation({
     mutationFn: async (id: number) => {
       await apiRequest("DELETE", `/api/bets/${id}`);
@@ -346,6 +354,7 @@ export default function JournalPage() {
               <>
                 <RecordTable title="Overall" rows={[data.summary.overall]} />
                 <div className="grid gap-3 md:grid-cols-2">
+                  <RecordTable title="By platform" rows={data.summary.byPlatform} />
                   <RecordTable title="By family" rows={data.summary.byFamily} />
                   <RecordTable title="By leak flags" rows={data.summary.byFlags} />
                   <RecordTable title="By bet type" rows={data.summary.byBetType} />
@@ -353,6 +362,18 @@ export default function JournalPage() {
                 </div>
               </>
             )}
+
+            {data.bets.length > 0 && !data.bets.some((b) => b.platform === "prizepicks") ? (
+              <Button
+                variant="secondary"
+                className="h-11 w-full"
+                onClick={() => seedPp.mutate()}
+                disabled={seedPp.isPending}
+                data-testid="button-seed-pp"
+              >
+                {seedPp.isPending ? "Loading…" : "Load the 16 PrizePicks entries (Nov 2025 – Jul 2026)"}
+              </Button>
+            ) : null}
 
             {showForm ? (
               <AddBetForm onDone={() => setShowForm(false)} />

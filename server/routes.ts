@@ -5,7 +5,7 @@ import { isDbConfigured } from "./db";
 import { runSportsGameOddsCheck } from "./providers/sportsgameodds";
 import { collectionConfigured, previewRaw, runCollection } from "./collect";
 import { getConsensusFeed, getLiveFeed } from "./opportunities";
-import { betInputSchema, createBet, deleteBet, listBets, seedInitialBets, updateBet } from "./bets";
+import { betInputSchema, createBet, deleteBet, listBets, seedInitialBets, seedPrizePicks, updateBet } from "./bets";
 
 export function registerRoutes(_server: Server, app: Express) {
   setupAuth(app);
@@ -107,6 +107,16 @@ export function registerRoutes(_server: Server, app: Express) {
     try {
       if (!isDbConfigured()) return res.status(503).json({ error: "Database not configured" });
       res.json(await seedInitialBets());
+    } catch (error) {
+      res.status(500).json({ error: String(error) });
+    }
+  });
+
+  /** Idempotent: loads the PrizePicks history when none is present. */
+  app.get("/api/bets/seed-prizepicks", async (_req, res) => {
+    try {
+      if (!isDbConfigured()) return res.status(503).json({ error: "Database not configured" });
+      res.json(await seedPrizePicks());
     } catch (error) {
       res.status(500).json({ error: String(error) });
     }

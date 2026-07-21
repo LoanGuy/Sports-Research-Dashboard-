@@ -83,6 +83,7 @@ interface CategoryRecord {
 
 export interface JournalSummary {
   overall: CategoryRecord;
+  byPlatform: CategoryRecord[];
   byBetType: CategoryRecord[];
   byLegCount: CategoryRecord[];
   byFlags: CategoryRecord[];
@@ -110,6 +111,7 @@ function addTo(record: CategoryRecord, bet: Bet): void {
 
 export function summarize(rows: Bet[]): JournalSummary {
   const overall = newRecord("All bets");
+  const byPlatform = new Map<string, CategoryRecord>();
   const byType = new Map<string, CategoryRecord>();
   const byLegs = new Map<string, CategoryRecord>();
   const byFlags = new Map<string, CategoryRecord>();
@@ -118,6 +120,10 @@ export function summarize(rows: Bet[]): JournalSummary {
   for (const bet of rows) {
     const legs = (bet.legs as BetLeg[]) ?? [];
     addTo(overall, bet);
+
+    const platformLabel = bet.platform;
+    if (!byPlatform.has(platformLabel)) byPlatform.set(platformLabel, newRecord(platformLabel));
+    addTo(byPlatform.get(platformLabel)!, bet);
 
     const typeLabel = bet.betType === "straight" ? "Straight" : bet.betType === "sgp" ? "Same-game parlay" : "Parlay";
     if (!byType.has(typeLabel)) byType.set(typeLabel, newRecord(typeLabel));
@@ -142,7 +148,7 @@ export function summarize(rows: Bet[]): JournalSummary {
   }
 
   const sorted = (m: Map<string, CategoryRecord>) => Array.from(m.values()).sort((a, b) => b.count - a.count);
-  return { overall, byBetType: sorted(byType), byLegCount: sorted(byLegs), byFlags: sorted(byFlags), byFamily: sorted(byFamily) };
+  return { overall, byPlatform: sorted(byPlatform), byBetType: sorted(byType), byLegCount: sorted(byLegs), byFlags: sorted(byFlags), byFamily: sorted(byFamily) };
 }
 
 export async function listBets(): Promise<{ bets: (Bet & { flags: string[] })[]; summary: JournalSummary }> {
@@ -307,4 +313,101 @@ export async function seedInitialBets(): Promise<{ seeded: number; message: stri
     await createBet(betInputSchema.parse(input));
   }
   return { seeded: seed.length, message: `Seeded ${seed.length} analyzed tickets.` };
+}
+
+/**
+ * PrizePicks entry history from ticket screenshots (Nov 2025 - Jul 2026).
+ * Idempotent: only inserts when no PrizePicks entries exist yet. Leg
+ * win/loss marks were read from the ticket graphics; unclear legs are
+ * "pending" (display only — entry results drive the analytics). Stat types
+ * were not shown on the tickets, so legs use market "other" except where
+ * the pick is clearly an MLB pitcher.
+ */
+export async function seedPrizePicks(): Promise<{ seeded: number; message: string }> {
+  const db = getDb();
+  const existing = await db.select({ id: bets.id }).from(bets).where(eq(bets.platform, "prizepicks")).limit(1);
+  if (existing.length > 0) {
+    return { seeded: 0, message: "PrizePicks entries already present — seed skipped." };
+  }
+
+  const leg = (description: string, result: BetLeg["result"], market: BetLeg["market"] = "other"): BetLeg => ({
+    description,
+    market,
+    result,
+    oddsAmerican: null,
+    line: null,
+  });
+
+  const entry = (
+    placedOn: string, picks: number, stake: number, payout: number, result: "won" | "lost",
+    bonusBet: boolean, notes: string, legs: BetLeg[],
+  ): BetInput => betInputSchema.parse({
+    placedOn, platform: "prizepicks", betType: "parlay", oddsAmerican: null,
+    stake, payout, result, bonusBet, notes, legs,
+  });
+
+  const seed: BetInput[] = [
+    entry("2026-07-20", 6, 10, 0, "lost", false, "6-Pick Power ($295 potential). MLB. 3 of 6 hit.", [
+      leg("G. Moreno", "lost"), leg("G. Perdomo", "lost"), leg("T. Soderstrom", "lost"),
+      leg("J. Wilson", "won"), leg("J. Springs", "won", "pitcher_ks"), leg("M. Bratt", "won"),
+    ]),
+    entry("2026-07-20", 6, 20, 0, "lost", false, "6-Pick Power ($560 potential). MLB, Angels-heavy stack (Trout/Neto/Soriano).", [
+      leg("J. Soriano", "lost"), leg("K. Leahy", "lost"), leg("J. Wetherholt", "won"),
+      leg("M. Trout", "lost"), leg("Z. Neto", "won"), leg("I. Herrera", "lost"),
+    ]),
+    entry("2026-07-19", 4, 30, 0, "lost", false, "4-Pick Power ($142.50 potential). Mixed MLB + soccer (Messi). The Eovaldi leg also killed a sweeps parlay the same day.", [
+      leg("N. Eovaldi", "lost", "pitcher_ks"), leg("E. Pérez", "won"),
+      leg("L. Gilbert", "won", "pitcher_ks"), leg("L. Messi", "won"),
+    ]),
+    entry("2026-07-17", 3, 0.01, 16, "won", true, "3-Pick BONUS Power. MLB batters. Stake recorded as $0.01 placeholder — it was a free bonus play (bonus flag excludes it from cash ROI).", [
+      leg("B. Rice", "won"), leg("M. Olson", "won", "batter_prop"), leg("J. Wood", "won", "batter_prop"),
+    ]),
+    entry("2026-07-15", 3, 15, 0, "lost", false, "3-Pick Power ($39 potential). Soccer + WNBA mix, outside the MLB niche.", [
+      leg("L. Messi", "push"), leg("V. Burton", "lost"), leg("J. Bellingham", "lost"),
+    ]),
+    entry("2026-07-14", 3, 10, 0, "lost", false, "3-Pick Power ($80 potential). Tennis — outside the MLB niche. 2 of 3 hit.", [
+      leg("R. Collignon", "won"), leg("A. Vallejo", "lost"), leg("Y. Putintseva", "won"),
+    ]),
+    entry("2026-07-13", 3, 10, 0, "lost", false, "3-Pick Power ($25 potential). WNBA — outside the MLB niche.", [
+      leg("D. Hamby", "lost"), leg("A. Gray", "lost"), leg("O. Miles", "won"),
+    ]),
+    entry("2026-07-11", 4, 20, 0, "lost", false, "4-Pick Power ($150 potential). UFC, including two McGregor legs — heavy correlation, far outside the niche.", [
+      leg("P. Pimblett", "lost"), leg("C. McGregor (leg 1)", "pending"), leg("C. McGregor (leg 2)", "pending"), leg("G. Steveson", "lost"),
+    ]),
+    entry("2026-07-09", 5, 20, 5, "won", false, "5-Pick FLEX: 4 of 5 hit, paid $5 on $20 — a 'win' that lost $15 cash. Flex softened the blow a Power play would have zeroed.", [
+      leg("K. McGonigle", "won"), leg("A. Ewing", "won"), leg("S. Perez", "lost"),
+      leg("B. Alexander", "won"), leg("C. Wong", "won"),
+    ]),
+    entry("2026-07-08", 3, 20, 40, "won", false, "3-Pick Power, all MLB pitchers (Melton/Burns/McClanahan) — the niche wins even on PrizePicks.", [
+      leg("T. Melton", "won", "pitcher_ks"), leg("C. Burns", "won", "pitcher_ks"), leg("S. McClanahan", "won", "pitcher_ks"),
+    ]),
+    entry("2026-01-30", 4, 0.01, 0, "lost", true, "4-Pick BONUS Power ($105 potential). NBA.", [
+      leg("P. Banchero", "lost"), leg("S. Barnes", "won"), leg("R. Barrett", "lost"), leg("K. Leonard", "won"),
+    ]),
+    entry("2025-12-08", 5, 8, 0, "lost", false, "5-Pick Power ($84 potential). NFL.", [
+      leg("J. Herbert", "pending"), leg("A. Brown", "pending"), leg("J. Fears", "lost"),
+      leg("O. Hampton", "pending"), leg("C. Dicker", "pending"),
+    ]),
+    entry("2025-12-07", 6, 5, 0, "lost", false, "6-Pick Power ($187.50 potential). NFL QBs. 5 of 6 hit — Power paid zero; Flex would have paid a tier.", [
+      leg("J. Love", "won"), leg("J. Brissett", "won"), leg("L. Jackson", "won"),
+      leg("J. Burrow", "won"), leg("T. Lawrence", "won"), leg("T. Shough", "lost"),
+    ]),
+    entry("2025-12-06", 6, 0.01, 0, "lost", true, "6-Pick BONUS Power ($200 potential). CBB/NBA.", [
+      leg("D. Wolf", "won"), leg("M. Turner", "lost"), leg("C. Flagg", "won"),
+      leg("M. Porter", "won"), leg("J. Hawkins", "lost"), leg("J. Johnson", "won"),
+    ]),
+    entry("2025-11-27", 6, 5.75, 0, "lost", false, "6-Pick Power ($258.75 potential). NFL with Mahomes appearing twice — correlated legs.", [
+      leg("L. Jackson", "pending"), leg("J. Love", "pending"), leg("P. Mahomes (leg 1)", "lost"),
+      leg("J. Goff", "pending"), leg("J. Burrow", "lost"), leg("P. Mahomes (leg 2)", "lost"),
+    ]),
+    entry("2025-11-21", 6, 6.25, 0, "lost", false, "6-Pick Power ($62.50 potential). CBB/NBA.", [
+      leg("K. George", "lost"), leg("P. Pritchard", "won"), leg("I. Jackson", "lost"),
+      leg("I. Quickley", "lost"), leg("M. Buzelis", "lost"), leg("N. Marshall", "won"),
+    ]),
+  ];
+
+  for (const input of seed) {
+    await createBet(input);
+  }
+  return { seeded: seed.length, message: `Seeded ${seed.length} PrizePicks entries.` };
 }
