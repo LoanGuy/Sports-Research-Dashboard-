@@ -314,6 +314,7 @@ export default function JournalPage() {
   const seedPp = useMutation({
     mutationFn: async () => {
       await apiRequest("GET", "/api/bets/seed-prizepicks");
+      await apiRequest("GET", "/api/bets/seed-prizepicks-2025");
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/bets"] }),
   });
@@ -363,7 +364,8 @@ export default function JournalPage() {
               </>
             )}
 
-            {data.bets.length > 0 && !data.bets.some((b) => b.platform === "prizepicks") ? (
+            {data.bets.length > 0 &&
+            !data.bets.some((b) => b.platform === "prizepicks" && (b.placedOn ?? "").startsWith("2025-0")) ? (
               <Button
                 variant="secondary"
                 className="h-11 w-full"
@@ -371,7 +373,7 @@ export default function JournalPage() {
                 disabled={seedPp.isPending}
                 data-testid="button-seed-pp"
               >
-                {seedPp.isPending ? "Loading…" : "Load the 16 PrizePicks entries (Nov 2025 – Jul 2026)"}
+                {seedPp.isPending ? "Loading…" : "Load the 26 PrizePicks entries (Feb 2025 – Jul 2026)"}
               </Button>
             ) : null}
 

@@ -411,3 +411,64 @@ export async function seedPrizePicks(): Promise<{ seeded: number; message: strin
   }
   return { seeded: seed.length, message: `Seeded ${seed.length} PrizePicks entries.` };
 }
+
+/**
+ * Earlier PrizePicks era (Feb-Mar 2025): 10 entries, all losses, larger
+ * stakes ($20-100), almost entirely NBA/soccer — far outside the MLB
+ * niche. Idempotent: skips if any 2025-dated PrizePicks entry exists.
+ */
+export async function seedPrizePicks2025(): Promise<{ seeded: number; message: string }> {
+  const db = getDb();
+  const rows = await db.select({ placedOn: bets.placedOn }).from(bets).where(eq(bets.platform, "prizepicks"));
+  if (rows.some((r) => (r.placedOn ?? "").startsWith("2025-0"))) {
+    return { seeded: 0, message: "Feb-Mar 2025 PrizePicks entries already present — seed skipped." };
+  }
+
+  const leg = (description: string, result: BetLeg["result"]): BetLeg => ({
+    description, market: "other", result, oddsAmerican: null, line: null,
+  });
+  const entry = (placedOn: string, stake: number, notes: string, legs: BetLeg[]): BetInput =>
+    betInputSchema.parse({
+      placedOn, platform: "prizepicks", betType: "parlay", oddsAmerican: null,
+      stake, payout: 0, result: "lost", bonusBet: false, notes, legs,
+    });
+
+  const seed: BetInput[] = [
+    entry("2025-02-21", 20, "6-Pick Flex, NBA/CBB. All six legs missed. Date approximate (section header off-screen).", [
+      leg("B. Carrington", "lost"), leg("K. George", "lost"), leg("D. Bane", "lost"),
+      leg("S. Curry", "lost"), leg("J. Jackson", "lost"), leg("M. Conley", "lost"),
+    ]),
+    entry("2025-02-21", 20, "3-Pick Power, NBA. Date approximate.", [
+      leg("J. Allen", "lost"), leg("K. Towns", "lost"), leg("G. Antetokounmpo", "lost"),
+    ]),
+    entry("2025-02-20", 20, "3-Pick Power, NBA.", [
+      leg("J. Allen", "lost"), leg("B. Mathurin", "lost"), leg("J. Tatum", "lost"),
+    ]),
+    entry("2025-02-20", 20, "3-Pick Power, soccer — outside the niche.", [
+      leg("É. Mendy", "won"), leg("D. Bîrligea", "lost"), leg("A. Varela", "lost"),
+    ]),
+    entry("2025-02-20", 20, "2-Pick Power, soccer — outside the niche.", [
+      leg("V. Osimhen", "won"), leg("V. Kristiansen", "lost"),
+    ]),
+    entry("2025-03-11", 20, "3-Pick Power, NBA. 2 of 3 hit. Date approximate.", [
+      leg("J. Hawkins", "won"), leg("K. Dunn", "won"), leg("I. Zubac", "lost"),
+    ]),
+    entry("2025-03-11", 20, "3-Pick Power, NBA. Date approximate.", [
+      leg("Z. Williamson", "won"), leg("T. Harris", "lost"), leg("C. Johnson", "lost"),
+    ]),
+    entry("2025-03-10", 100, "3-Pick Power at a $100 stake — 5x the usual sizing, NBA, lost.", [
+      leg("J. Valančiūnas", "lost"), leg("D. Brooks", "won"), leg("M. Bridges", "won"),
+    ]),
+    entry("2025-03-09", 50, "3-Pick Power at $50, NBA. 2 of 3 hit.", [
+      leg("T. Harris", "won"), leg("S. Castle", "won"), leg("B. Bogdanović", "lost"),
+    ]),
+    entry("2025-03-09", 50, "2-Pick Power at $50 — same Castle/Bogdanović pair as the 3-pick placed the same day (correlated exposure).", [
+      leg("S. Castle", "won"), leg("B. Bogdanović", "lost"),
+    ]),
+  ];
+
+  for (const input of seed) {
+    await createBet(input);
+  }
+  return { seeded: seed.length, message: `Seeded ${seed.length} Feb-Mar 2025 PrizePicks entries.` };
+}

@@ -5,7 +5,7 @@ import { isDbConfigured } from "./db";
 import { runSportsGameOddsCheck } from "./providers/sportsgameodds";
 import { collectionConfigured, previewRaw, runCollection } from "./collect";
 import { getConsensusFeed, getLiveFeed } from "./opportunities";
-import { betInputSchema, createBet, deleteBet, listBets, seedInitialBets, seedPrizePicks, updateBet } from "./bets";
+import { betInputSchema, createBet, deleteBet, listBets, seedInitialBets, seedPrizePicks, seedPrizePicks2025, updateBet } from "./bets";
 
 export function registerRoutes(_server: Server, app: Express) {
   setupAuth(app);
@@ -117,6 +117,16 @@ export function registerRoutes(_server: Server, app: Express) {
     try {
       if (!isDbConfigured()) return res.status(503).json({ error: "Database not configured" });
       res.json(await seedPrizePicks());
+    } catch (error) {
+      res.status(500).json({ error: String(error) });
+    }
+  });
+
+  /** Idempotent: loads the Feb-Mar 2025 PrizePicks era. */
+  app.get("/api/bets/seed-prizepicks-2025", async (_req, res) => {
+    try {
+      if (!isDbConfigured()) return res.status(503).json({ error: "Database not configured" });
+      res.json(await seedPrizePicks2025());
     } catch (error) {
       res.status(500).json({ error: String(error) });
     }
