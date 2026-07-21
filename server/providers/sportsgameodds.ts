@@ -97,12 +97,12 @@ function collectStatIds(events: unknown[]): { statIds: string[]; oddsCount: numb
       }
     }
   }
-  return { statIds: [...statIds].sort(), oddsCount };
+  return { statIds: Array.from(statIds).sort(), oddsCount };
 }
 
 function targetBooks(bookIds: Set<string>): string {
   const hits: string[] = [];
-  for (const id of bookIds) {
+  for (const id of Array.from(bookIds)) {
     const lower = id.toLowerCase();
     if (lower.includes("hardrock") || lower.includes("hard_rock")) hits.push(`${id} (Hard Rock)`);
     if (lower.includes("prizepicks") || lower.includes("prize_picks")) hits.push(`${id} (PrizePicks)`);
@@ -129,9 +129,9 @@ function analyzeEvents(check: string, path: string, status: number | null, body:
   collectBookmakers(parsed, books);
   collectNotices(parsed, notices);
   const { statIds, oddsCount } = collectStatIds(data);
-  const leagues = [
-    ...new Set(data.map((e) => (e as { leagueID?: string }).leagueID).filter(Boolean)),
-  ];
+  const leagues = Array.from(
+    new Set(data.map((e) => (e as { leagueID?: string }).leagueID).filter(Boolean)),
+  );
   return {
     check,
     path,
@@ -140,9 +140,9 @@ function analyzeEvents(check: string, path: string, status: number | null, body:
     summary: `${data.length} event(s), ${oddsCount} odds entries, ${books.size} bookmaker IDs. Target platforms: ${targetBooks(books)}`,
     detail: {
       leaguesSeen: leagues,
-      bookmakerIds: [...books].sort(),
+      bookmakerIds: Array.from(books).sort(),
       statIds,
-      planNotices: [...notices],
+      planNotices: Array.from(notices),
       liveDataMarkers: {
         hasScores: body.includes('"score"'),
         hasPeriods: body.includes("currentPeriodID"),
