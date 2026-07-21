@@ -17,6 +17,16 @@ export function registerRoutes(_server: Server, app: Express) {
       status: "ok",
       database: isDbConfigured() ? "configured" : "not configured",
       collection: collectionConfigured().ok ? "configured" : "not configured",
+      // Presence booleans only — values are never exposed.
+      envSeenByApp: {
+        DATABASE_URL: Boolean(process.env.DATABASE_URL),
+        SPORTSGAMEODDS_API_KEY: Boolean(process.env.SPORTSGAMEODDS_API_KEY),
+        THEODDSAPI_KEY: Boolean(
+          process.env.THEODDSAPI_KEY || process.env.THE_ODDS_API_KEY || process.env.ODDS_API_KEY || process.env.THEODDS_API_KEY,
+        ),
+        SESSION_SECRET: Boolean(process.env.SESSION_SECRET),
+        DASHBOARD_PASSWORD: Boolean(process.env.DASHBOARD_PASSWORD),
+      },
     });
   });
 
