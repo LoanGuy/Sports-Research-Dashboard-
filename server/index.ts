@@ -18,6 +18,9 @@ declare module "http" {
 
 app.use(
   express.json({
+    // Trend screenshot uploads arrive as base64 JSON; phone screenshots
+    // run a few MB each, so the default 100kb limit is far too small.
+    limit: "40mb",
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     },

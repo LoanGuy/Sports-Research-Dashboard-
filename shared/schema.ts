@@ -127,8 +127,36 @@ export const bets = pgTable(
   (t) => [index("bets_placed_idx").on(t.placedOn)],
 );
 
+/**
+ * User-supplied trend research for a game day (e.g. parsed from Linemate
+ * screenshots). Trends are matched to collected markets by player and
+ * market and fill the "Recent form" / "Matchup" grade categories. Signals
+ * are stored as JSON: [{ kind, label, hits, total }].
+ */
+export const trends = pgTable(
+  "trends",
+  {
+    id: serial("id").primaryKey(),
+    gameDate: text("game_date").notNull(), // "YYYY-MM-DD" (ET)
+    playerName: text("player_name").notNull(),
+    playerKey: text("player_key").notNull(),
+    team: text("team"),
+    market: text("market").notNull(),
+    side: text("side").notNull().default("over"), // "over" | "under"
+    line: doublePrecision("line"),
+    oddsAmerican: integer("odds_american"),
+    signals: jsonb("signals").notNull(),
+    note: text("note"),
+    source: text("source").notNull().default("manual"), // "upload" | "manual"
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("trends_game_date_idx").on(t.gameDate)],
+);
+
 export type Bet = typeof bets.$inferSelect;
 export type NewBet = typeof bets.$inferInsert;
+export type Trend = typeof trends.$inferSelect;
+export type NewTrend = typeof trends.$inferInsert;
 
 export type Event = typeof events.$inferSelect;
 export type NewEvent = typeof events.$inferInsert;

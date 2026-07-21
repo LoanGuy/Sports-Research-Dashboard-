@@ -7,6 +7,9 @@ import { runOddsApiCheck } from "./providers/theoddsapi";
 import { collectionConfigured, previewRaw, runCollection } from "./collect";
 import { getConsensusFeed, getLiveFeed } from "./opportunities";
 import { betInputSchema, createBet, deleteBet, listBets, seedInitialBets, seedPrizePicks, seedPrizePicks2025, updateBet } from "./bets";
+import { anthropicConfigured, createTrends, deleteTrend, listTrends, parseTrendImages, todayEt, trendInputSchema } from "./trends";
+import { normalizePlayerKey } from "./markets";
+import { z } from "zod";
 
 export function registerRoutes(_server: Server, app: Express) {
   setupAuth(app);
@@ -26,8 +29,71 @@ export function registerRoutes(_server: Server, app: Express) {
         ),
         SESSION_SECRET: Boolean(process.env.SESSION_SECRET),
         DASHBOARD_PASSWORD: Boolean(process.env.DASHBOARD_PASSWORD),
+        ANTHROPIC_API_KEY: Boolean(process.env.ANTHROPIC_API_KEY),
       },
     });
+  });
+
+  // ---- Trend research (screenshot uploads + manual entry) ----
+
+  /** Today's saved trends (or ?date=YYYY-MM-DD). */
+  app.get("/api/trends", async (req, res) => {
+    try {
+      if (!isDbConfigured()) return res.status(503).json({ error: "Database not configured" });
+      const date = typeof req.query.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date) ? req.query.date : todayEt();
+      res.json({ date, trends: await listTrends(date) });
+    } catch (error) {
+      res.status(500).json({ error: String(error) });
+    }
+  });
+
+  /** Save reviewed trends. Body: { trends: TrendInput[] }. */
+  app.post("/api/trends", async (req, res) => {
+    try {
+      if (!isDbConfigured()) return res.status(503).json({ error: "Database not configured" });
+      const parsed = z.object({ trends: z.array(trendInputSchema).min(1) }).safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      res.status(201).json({ saved: await createTrends(parsed.data.trends, normalizePlayerKey) });
+    } catch (error) {
+      res.status(500).json({ error: String(error) });
+    }
+  });
+
+  app.delete("/api/trends/:id", async (req, res) => {
+    try {
+      if (!isDbConfigured()) return res.status(503).json({ error: "Database not configured" });
+      await deleteTrend(Number(req.params.id));
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: String(error) });
+    }
+  });
+
+  /**
+   * Parse trend screenshots with Claude vision. Body:
+   * { images: [{ mediaType, data (base64) }] }. Returns extracted trends
+   * for the user to review before saving — nothing is stored here.
+   */
+  app.post("/api/trends/parse", async (req, res) => {
+    try {
+      if (!anthropicConfigured()) {
+        return res.status(503).json({
+          error: "ANTHROPIC_API_KEY is not set. Add it in Railway variables to enable screenshot parsing — manual entry still works.",
+        });
+      }
+      const parsed = z
+        .object({
+          images: z
+            .array(z.object({ mediaType: z.string().min(1), data: z.string().min(1) }))
+            .min(1)
+            .max(8),
+        })
+        .safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      res.json({ trends: await parseTrendImages(parsed.data.images) });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
   });
 
   /** Live research feed built from the newest collected batch. */

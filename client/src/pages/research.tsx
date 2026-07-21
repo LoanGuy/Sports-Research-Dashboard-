@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
-import { FileBarChart, RefreshCw } from "lucide-react";
+import { FileBarChart, RefreshCw, TrendingUp } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { AppShell } from "@/components/app-shell";
 import { OpportunityCard } from "@/components/opportunity-card";
@@ -143,13 +143,20 @@ export default function ResearchPage() {
       </div>
 
       <div className="space-y-2.5 px-4 pt-3 md:grid md:grid-cols-2 md:items-start md:gap-3 md:space-y-0 xl:grid-cols-3">
-        <div className="grid grid-cols-2 gap-2 md:col-span-2 xl:col-span-3">
+        <div className="grid grid-cols-3 gap-2 md:col-span-2 xl:col-span-3">
           <Link
             href="/report"
             className="flex h-11 items-center justify-center gap-2 rounded-lg border border-border bg-card text-[13px] font-semibold text-foreground hover-elevate"
             data-testid="link-report"
           >
             <FileBarChart className="h-4 w-4 text-emerald-400" /> Edge Report
+          </Link>
+          <Link
+            href="/trends"
+            className="flex h-11 items-center justify-center gap-2 rounded-lg border border-border bg-card text-[13px] font-semibold text-foreground hover-elevate"
+            data-testid="link-trends"
+          >
+            <TrendingUp className="h-4 w-4 text-amber-400" /> Trends
           </Link>
           <button
             onClick={() => collect.mutate()}

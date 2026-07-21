@@ -142,3 +142,71 @@ describe("buildOpportunities", () => {
     expect(result).toHaveLength(0);
   });
 });
+
+describe("buildOpportunities with uploaded trends", () => {
+  const trendBase = {
+    id: 1,
+    gameDate: "2026-07-21",
+    team: null,
+    market: "Pitcher strikeouts",
+    side: "over",
+    line: 6.5,
+    oddsAmerican: null,
+    note: "Rain with winds blowing left 10MPH",
+    source: "upload",
+    createdAt: NOW,
+  };
+
+  it("grades Recent form and Matchup from a matching trend and blends the overall grade", () => {
+    const rows = [
+      makeRow("fanduel", -120, 100),
+      makeRow("draftkings", -118, -102),
+      makeRow("betmgm", -122, 102),
+      makeRow("hardrockbet", 110, -130),
+    ];
+    const trend = {
+      ...trendBase,
+      playerName: "R. Vega", // initial form must still match "Ramon Vega"
+      playerKey: "r. vega",
+      signals: [
+        { kind: "recent", label: "Hit in 12 of last 12 games", hits: 12, total: 12 },
+        { kind: "vs_opponent", label: "Hit in 1 of last 1 vs PIT", hits: 1, total: 1 },
+      ],
+    };
+    const result = buildOpportunities(rows, new Map([[1, makeEvent(1)]]), NOW, new Set(["hardrockbet"]), [trend as never]);
+    expect(result.length).toBeGreaterThan(0);
+    const best = result[0];
+    const byKey = Object.fromEntries(best.categories.map((c) => [c.key, c.grade]));
+    expect(byKey.form).toBe("A"); // 12/12 with a real sample
+    expect(byKey.matchup).toBe("D"); // 1/1 is too small to mean anything
+    expect(best.recentForm).toHaveLength(2);
+    expect(best.recentForm[0].hits).toBe(12);
+    // Conditions note carries the uploaded weather text but stays ungraded.
+    const conditions = best.categories.find((c) => c.key === "conditions")!;
+    expect(conditions.grade).toBe("Incomplete");
+    expect(conditions.note).toContain("Rain");
+    // Overall grade is a blend, no longer just the price grade.
+    expect(["A", "B", "C"]).toContain(best.grade);
+  });
+
+  it("ignores trends for the other side or a different market", () => {
+    const rows = [
+      makeRow("fanduel", -120, 100),
+      makeRow("draftkings", -118, -102),
+      makeRow("betmgm", -122, 102),
+      makeRow("hardrockbet", 110, -130),
+    ];
+    const trend = {
+      ...trendBase,
+      playerName: "Ramon Vega",
+      playerKey: "ramon vega",
+      side: "under", // surfaced side is Over — must not match
+      signals: [{ kind: "recent", label: "Hit in 9 of last 9", hits: 9, total: 9 }],
+    };
+    const result = buildOpportunities(rows, new Map([[1, makeEvent(1)]]), NOW, new Set(["hardrockbet"]), [trend as never]);
+    expect(result.length).toBeGreaterThan(0);
+    const byKey = Object.fromEntries(result[0].categories.map((c) => [c.key, c.grade]));
+    expect(byKey.form).toBe("Incomplete");
+    expect(result[0].recentForm).toHaveLength(0);
+  });
+});
