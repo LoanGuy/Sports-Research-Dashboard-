@@ -21,30 +21,30 @@ Status legend: ✅ verified via API response · 📝 written confirmation ·
 
 | Capability | OpticOdds | SportsGameOdds | The Odds API | SportsDataIO | Sportradar | Genius Sports | Goalserve | API-Basketball |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Hard Rock Bet odds | ⬜ | ❌ free tier | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
-| PrizePicks projections | ❓ | ❌ free tier | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| Hard Rock Bet odds | ⬜ | ❌ free tier | ✅ hardrockbet | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| PrizePicks projections | ❓ | ❌ free tier | ❌ not a book | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 | NoVig markets | ❓ | ❌ free tier | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
-| Major sportsbook odds | Ⓜ️ 100+ | ✅ 9 books (free) | Ⓜ️ ~40 | ⬜ | ⬜ | ⬜ | Ⓜ️ 50+ | ⬜ |
-| MLB player props | Ⓜ️ | ✅ deep | ⬜ | ⬜ | ⬜ | ⬜ | Ⓜ️ | ⬜ |
+| Major sportsbook odds | Ⓜ️ 100+ | ✅ 9 books (free) | ✅ 16 books | ⬜ | ⬜ | ⬜ | Ⓜ️ 50+ | ⬜ |
+| MLB player props | Ⓜ️ | ✅ deep | ✅ 3 core mkts | ⬜ | ⬜ | ⬜ | Ⓜ️ | ⬜ |
 | Tennis player props | ⬜ | ❌ free tier | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 | CBB live scores | ⬜ | ❓ fields seen | ⬜ | Ⓜ️ | Ⓜ️ | ⬜ | ⬜ | ⬜ |
 | CBB team fouls (live) | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 | Opening lines | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
-| Current lines | ❓ | ✅ | ❓ | ⬜ | ⬜ | ⬜ | ❓ | ⬜ |
+| Current lines | ❓ | ✅ | ✅ | ⬜ | ⬜ | ⬜ | ❓ | ⬜ |
 | Historical line movement | Ⓜ️ | ⬜ | Ⓜ️ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
-| Live odds | Ⓜ️ | ✅ observed | ⬜ | ⬜ | ⬜ | ⬜ | ❓ 1s push | ⬜ |
+| Live odds | Ⓜ️ | ✅ observed | ❓ | ⬜ | ⬜ | ⬜ | ❓ 1s push | ⬜ |
 | Confirmed lineups | Ⓜ️ | ⬜ | ⬜ | Ⓜ️ | Ⓜ️ | ⬜ | ⬜ | ⬜ |
 | Injuries | Ⓜ️ | ⬜ | ⬜ | Ⓜ️ | ⬜ | ⬜ | ⬜ | ⬜ |
 | Starting pitchers | ⬜ | ⬜ | ⬜ | Ⓜ️ | ⬜ | ⬜ | ⬜ | ⬜ |
 | Pitch counts | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 | API update frequency | Ⓜ️ | ❓ per tier | ⬜ | ⬜ | ⬜ | ⬜ | ❓ 30s pregame | ⬜ |
-| API rate limits | ⬜ | ✅ 10/min ok | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| API rate limits | ⬜ | ✅ 10/min ok | ✅ credit meter | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 | Commercial-use terms | ⬜ | ❓ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
-| Pricing | ⬜ none public | ❓ $0/$99+/$499 | ❓ $0/~$30+ | ⬜ | ⬜ | ⬜ | ❓ $500–800/mo | ⬜ |
+| Pricing | ⬜ none public | ❓ $0/$99+/$499 | ✅ free 500cr/mo | ⬜ | ⬜ | ⬜ | ❓ $500–800/mo | ⬜ |
 
-**Critical gap:** Hard Rock Bet coverage — the dashboard's first requirement —
-was not confirmed for **any** provider in this pass. It must be checked against
-each finalist's live bookmaker-list endpoint or trial key.
+**RESOLVED (2026-07-21):** Hard Rock Bet coverage — the dashboard's first
+requirement — is **verified via The Odds API** (`hardrockbet`, main lines and
+player props) and wired into live collection.
 
 Weather comes from the **National Weather Service API** (forecasts,
 observations, and alerts for United States locations) and is not part of this
@@ -125,14 +125,25 @@ comparison.
 - Open question for SGO support (get written confirmation): which paid tier,
   if any, includes Hard Rock Bet, PrizePicks, Novig, and ATP/WTA tennis?
 
-### The Odds API — not evaluated (evidence gap, not inferiority)
+### The Odds API — VERIFIED via API (free tier), 2026-07-21
 
-- Researched: 2026-07-15 — fetch attempts yielded no verification-surviving
-  claims. Search-stage (unverified) notes: free 500 credits/mo, paid from
-  ~$30/mo, ~40 mainstream US books, credit-based quota, historical odds
-  add-on. Known in practitioner circles for cheap historical data.
-- Worth a follow-up pass: check bookmaker list for Hard Rock Bet, and player-
-  prop market depth for MLB/tennis/CBB.
+- **Hard Rock Bet: ✅ CONFIRMED via real API responses** — `hardrockbet` and
+  `hardrockbet_oh` appear in MLB main lines (16 bookmakers across us+us2
+  regions, 26 events), and **both post player props** (batter_hits,
+  batter_total_bases, pitcher_strikeouts) verified on a live event. The
+  project's #1 unmet requirement is now covered. Also notable: `fliff`
+  is a covered book.
+- Credit metering verified from response headers: the 3-call battery cost
+  exactly 10 of the 500/month free credits (sports list free; odds calls
+  cost markets × regions).
+- Now wired as collection source #2: game totals for all upcoming events
+  (2 credits/run) plus props for ODDSAPI_EVENTS_LIMIT pregame events
+  (6 credits each). Cross-provider market merging via normalized player
+  names; events matched on home team + 2-hour start window.
+- Prop depth is narrower than SportsGameOdds (no pitcher outs/walks/ER
+  markets in the featured set) — SGO remains the prop-depth source; The
+  Odds API is the Hard Rock + additional-books source. Historical odds
+  add-on unexplored.
 
 ### SportsDataIO — not evaluated (evidence gap)
 
