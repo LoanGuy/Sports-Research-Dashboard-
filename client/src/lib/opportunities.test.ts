@@ -56,6 +56,31 @@ function makeRow(
   };
 }
 
+describe("buildOpportunities with my-books filter", () => {
+  it("only surfaces the user's books while all books shape the consensus", () => {
+    const rows = [
+      makeRow("fanduel", -120, 100),
+      makeRow("draftkings", -118, -102),
+      makeRow("betmgm", -122, 102),
+      makeRow("hardrockbet", 105, -125),
+      makeRow("caesars", 120, -140), // better price than Hard Rock, but not the user's book
+    ];
+    const events = new Map([[1, makeEvent(1)]]);
+    const mine = buildOpportunities(rows, events, NOW, new Set(["hardrockbet"]));
+    expect(mine.length).toBeGreaterThan(0);
+    // Every surfaced opportunity belongs to the user's book...
+    expect(mine.every((o) => o.platform === "hardrockbet")).toBe(true);
+    // ...while the consensus still counts all five books.
+    expect(mine[0].consensus.sourceCount).toBe(5);
+  });
+
+  it("returns nothing when the user's books have no quote in the market", () => {
+    const rows = [makeRow("fanduel", -120, 100), makeRow("draftkings", -118, -102), makeRow("caesars", 120, -140)];
+    const result = buildOpportunities(rows, new Map([[1, makeEvent(1)]]), NOW, new Set(["hardrockbet"]));
+    expect(result).toHaveLength(0);
+  });
+});
+
 describe("buildOpportunities", () => {
   it("surfaces the best price against the median consensus", () => {
     // Three books at -120/+100, one book offering +110 on the Over.

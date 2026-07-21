@@ -94,7 +94,8 @@ export default function ResearchPage() {
     },
   });
 
-  const isLive = (liveFeed?.count ?? 0) > 0;
+  const hasLiveData = liveFeed?.origin === "live";
+  const isLive = hasLiveData && (liveFeed?.count ?? 0) > 0;
   const opportunities = isLive ? liveFeed!.opportunities : sampleOpportunities;
 
   const platformChips = useMemo(() => {
@@ -166,11 +167,19 @@ export default function ResearchPage() {
           </p>
         ) : null}
 
+        {hasLiveData && !isLive ? (
+          <p className="rounded-lg border border-sky-500/25 bg-sky-500/5 px-3 py-2 text-[12px] leading-4 text-sky-300 md:col-span-2 xl:col-span-3">
+            Live data collected, but none of your books (Hard Rock, Fliff) currently beat the
+            market consensus by 1+ points. That is a normal, honest result — edges come and go.
+            Use Calculators → Price check to evaluate any line manually, or refresh closer to
+            game time. Sample cards are shown below for reference.
+          </p>
+        ) : null}
         {isLive ? (
           <p className="rounded-lg border border-emerald-500/25 bg-emerald-500/5 px-3 py-2 text-[12px] leading-4 text-emerald-400 md:col-span-2 xl:col-span-3">
-            Live market data — {liveFeed!.count} opportunities from the latest collection run.
-            Matchup and form analysis are not yet applied; grades reflect market value and data
-            confidence only. Tap any card for details.
+            Live market data — {liveFeed!.count} opportunities at your books (Hard Rock, Fliff)
+            from the latest collection run, measured against the full multi-book consensus.
+            Matchup and form analysis are not yet applied. Tap any card for details.
           </p>
         ) : (
           <p className="rounded-lg border border-border bg-card px-3 py-2 text-[12px] leading-4 text-muted-foreground md:col-span-2 xl:col-span-3">

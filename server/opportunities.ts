@@ -18,8 +18,23 @@ import { americanToImpliedProb, median, noVigFromAmerican } from "@shared/odds";
 import { normalizePlayerKey } from "./markets";
 import { getDb, isDbConfigured } from "./db";
 
-const EDGE_THRESHOLD_PTS = 1.5;
+const EDGE_THRESHOLD_PTS = 1.0;
 const MAX_OPPORTUNITIES = 30;
+
+/**
+ * The bookmakers the user can actually bet. All collected books feed the
+ * consensus (they are the measuring stick); only these surface as
+ * opportunities. Override with MY_BOOKMAKERS (comma-separated bookmaker
+ * IDs); an empty set means "surface any book".
+ */
+const DEFAULT_MY_BOOKS = ["hardrockbet", "hardrockbet_oh", "fliff"];
+
+export function myBookmakers(): Set<string> {
+  const raw = process.env.MY_BOOKMAKERS;
+  if (raw === undefined) return new Set(DEFAULT_MY_BOOKS);
+  const list = raw.split(",").map((b) => b.trim().toLowerCase()).filter(Boolean);
+  return new Set(list);
+}
 
 const BOOK_NAMES: Record<string, string> = {
   draftkings: "DraftKings",
@@ -81,6 +96,7 @@ export function buildOpportunities(
   rows: MarketRecord[],
   eventById: Map<number, Event>,
   now: Date,
+  myBooks: Set<string> = new Set(),
 ): Opportunity[] {
   // Group rows (one per bookmaker) into markets.
   const groups = new Map<string, MarketRecord[]>();
@@ -142,10 +158,14 @@ export function buildOpportunities(
       lastUpdated: `${age} min ago`,
     };
 
-    // Find the single best price on each side across books.
+    // Surface the best price on each side — restricted to the user's own
+    // books when configured. Every collected book still shapes the
+    // consensus above; this filter only controls what is bettable.
+    const candidateQuotes = myBooks.size > 0 ? quotes.filter((q) => myBooks.has(bookKey(q))) : quotes;
+    if (candidateQuotes.length === 0) continue;
     for (const side of ["over", "under"] as const) {
       let best: { quote: MarketRecord; edgePts: number; breakEven: number; odds: number } | null = null;
-      for (const quote of quotes) {
+      for (const quote of candidateQuotes) {
         const odds = side === "over" ? quote.overOdds! : quote.underOdds!;
         let breakEven: number;
         try {
@@ -307,7 +327,7 @@ export async function getLiveFeed(): Promise<LiveFeed> {
       reason: isDbConfigured() ? "No collected data yet" : "Database not configured",
     };
   }
-  const opportunities = buildOpportunities(latest.rows, latest.eventById, new Date());
+  const opportunities = buildOpportunities(latest.rows, latest.eventById, new Date(), myBookmakers());
   return { origin: "live", generatedAt, count: opportunities.length, opportunities };
 }
 
