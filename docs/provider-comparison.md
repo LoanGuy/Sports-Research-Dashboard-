@@ -21,24 +21,24 @@ Status legend: ✅ verified via API response · 📝 written confirmation ·
 
 | Capability | OpticOdds | SportsGameOdds | The Odds API | SportsDataIO | Sportradar | Genius Sports | Goalserve | API-Basketball |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Hard Rock Bet odds | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
-| PrizePicks projections | ❓ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
-| NoVig markets | ❓ | ❓ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
-| Major sportsbook odds | Ⓜ️ 100+ | Ⓜ️ 80+ | Ⓜ️ ~40 | ⬜ | ⬜ | ⬜ | Ⓜ️ 50+ | ⬜ |
-| MLB player props | Ⓜ️ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | Ⓜ️ | ⬜ |
-| Tennis player props | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
-| CBB live scores | ⬜ | ⬜ | ⬜ | Ⓜ️ | Ⓜ️ | ⬜ | ⬜ | ⬜ |
+| Hard Rock Bet odds | ❌ free tier | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| PrizePicks projections | ❌ free tier | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| NoVig markets | ❌ free tier | ❓ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| Major sportsbook odds | ✅ 9 books (free) | Ⓜ️ 80+ | Ⓜ️ ~40 | ⬜ | ⬜ | ⬜ | Ⓜ️ 50+ | ⬜ |
+| MLB player props | ✅ deep | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | Ⓜ️ | ⬜ |
+| Tennis player props | ❌ free tier | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| CBB live scores | ❓ fields seen | ⬜ | ⬜ | Ⓜ️ | Ⓜ️ | ⬜ | ⬜ | ⬜ |
 | CBB team fouls (live) | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 | Opening lines | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
-| Current lines | ❓ | ❓ | ❓ | ⬜ | ⬜ | ⬜ | ❓ | ⬜ |
+| Current lines | ✅ | ❓ | ❓ | ⬜ | ⬜ | ⬜ | ❓ | ⬜ |
 | Historical line movement | Ⓜ️ | ⬜ | Ⓜ️ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
-| Live odds | Ⓜ️ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ❓ 1s push | ⬜ |
+| Live odds | ✅ observed | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ❓ 1s push | ⬜ |
 | Confirmed lineups | Ⓜ️ | ⬜ | ⬜ | Ⓜ️ | Ⓜ️ | ⬜ | ⬜ | ⬜ |
 | Injuries | Ⓜ️ | ⬜ | ⬜ | Ⓜ️ | ⬜ | ⬜ | ⬜ | ⬜ |
 | Starting pitchers | ⬜ | ⬜ | ⬜ | Ⓜ️ | ⬜ | ⬜ | ⬜ | ⬜ |
 | Pitch counts | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
-| API update frequency | Ⓜ️ | ❓ per tier | ⬜ | ⬜ | ⬜ | ⬜ | ❓ 30s pregame | ⬜ |
-| API rate limits | ⬜ | ❓ per tier | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| API update frequency | ❓ per tier | ❓ per tier | ⬜ | ⬜ | ⬜ | ⬜ | ❓ 30s pregame | ⬜ |
+| API rate limits | ✅ 10/min ok | ❓ per tier | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 | Commercial-use terms | ⬜ | ❓ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 | Pricing | ⬜ none public | ❓ $0/$99+/$499 | ❓ $0/~$30+ | ⬜ | ⬜ | ⬜ | ❓ $500–800/mo | ⬜ |
 
@@ -77,7 +77,7 @@ comparison.
   (bid/ask? liquidity?); PrizePicks projection fields; MLB K/TB/outs props;
   tennis props; historical movement granularity; latency.
 
-### SportsGameOdds — shortlist SECONDARY / prototyping
+### SportsGameOdds — VERIFIED via API (free tier), 2026-07-21
 
 - Researched: 2026-07-15 (indexed copies of official pricing/terms/docs; live site 403-blocks fetchers)
 - **Pricing (indexed, conflicting copies — confirm on live page):** free
@@ -95,6 +95,35 @@ comparison.
   page reported), unadjudicated. Check `sportsgameodds.com/docs/data-types/bookmakers`.
 - Attractive property: the free tier allows testing the actual response shape
   before spending anything.
+
+**API verification runs (2026-07-21, free "Amateur" tier, via the dashboard's
+`/api/provider-check/sportsgameodds` battery):**
+
+- Auth: `X-Api-Key` header works. Rate limit 10/min was never hit.
+- Leagues on this tier (8): MLB, NBA, NCAAB, NFL, NHL, NCAAF, MLS,
+  UEFA Champions League. **No tennis league**; sport-wide queries
+  (`sportID=TENNIS`) are rejected: "must specify a leagueID or eventID at
+  this subscription tier."
+- Bookmakers actually present in MLB odds (9): betmgm, bovada, caesars,
+  draftkings, espnbet, fanduel, pointsbet, unibet, williamhill.
+  **Hard Rock Bet, PrizePicks, and Novig were NOT present.** Payload notice:
+  "Response is missing 14,279 bookmaker odds. Upgrade your API key" — the
+  withheld set may or may not include the three targets; unproven either way.
+- MLB player props (verified statIDs): batting hits, totalBases, homeRuns,
+  RBI, runs+rbi, hits+runs+rbi, singles, doubles, triples, stolenBases,
+  basesOnBalls, strikeouts, firstHomeRun; pitching strikeouts, outs,
+  earnedRuns, hits, basesOnBalls, pitchesThrown, win; fantasyScore; points.
+  This covers every MLB prop in the project spec.
+- Live data: a live in-progress MLB game appeared with scores, period state,
+  and odds — live odds confirmed at least for MLB. NCAAB events exposed
+  score/period fields (offseason, so no live game or odds to inspect; team
+  fouls unverified).
+- **Object-metering caution:** 2 MLB events returned 3,010 odds entries.
+  The free tier's small monthly object cap makes continuous polling
+  impractical — the ~$99-149/mo Rookie tier (5M objects/mo) is the
+  realistic floor for live collection.
+- Open question for SGO support (get written confirmation): which paid tier,
+  if any, includes Hard Rock Bet, PrizePicks, Novig, and ATP/WTA tennis?
 
 ### The Odds API — not evaluated (evidence gap, not inferiority)
 
