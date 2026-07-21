@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { Link } from "wouter";
+import { FileBarChart } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { AppShell } from "@/components/app-shell";
 import { OpportunityCard } from "@/components/opportunity-card";
@@ -126,6 +128,14 @@ export default function ResearchPage() {
       </div>
 
       <div className="space-y-2.5 px-4 pt-3 md:grid md:grid-cols-2 md:items-start md:gap-3 md:space-y-0 xl:grid-cols-3">
+        <Link
+          href="/report"
+          className="flex h-11 items-center justify-center gap-2 rounded-lg border border-border bg-card text-[13px] font-semibold text-foreground hover-elevate md:col-span-2 xl:col-span-3"
+          data-testid="link-report"
+        >
+          <FileBarChart className="h-4 w-4 text-emerald-400" /> View today's Edge Report (shareable)
+        </Link>
+
         {isLive ? (
           <p className="rounded-lg border border-emerald-500/25 bg-emerald-500/5 px-3 py-2 text-[12px] leading-4 text-emerald-400 md:col-span-2 xl:col-span-3">
             Live market data — {liveFeed!.count} opportunities from the latest collection run.

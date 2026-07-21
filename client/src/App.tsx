@@ -10,6 +10,7 @@ import LivePage from "./pages/live";
 import CalculatorsPage from "./pages/calculators";
 import AppSettingsPage from "./pages/app-settings";
 import JournalPage from "./pages/journal";
+import ReportPage from "./pages/report";
 import LoginPage from "./pages/login";
 import NotFound from "./pages/not-found";
 
@@ -46,6 +47,7 @@ function AppContent() {
         <Route path="/opportunity/:id" component={OpportunityDetailPage} />
         <Route path="/live" component={LivePage} />
         <Route path="/journal" component={JournalPage} />
+        <Route path="/report" component={ReportPage} />
         <Route path="/calculators" component={CalculatorsPage} />
         <Route path="/settings" component={AppSettingsPage} />
         <Route component={NotFound} />
