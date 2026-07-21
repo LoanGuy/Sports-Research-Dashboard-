@@ -3,6 +3,7 @@ import type { Server } from "http";
 import { requireAuth, setupAuth } from "./auth";
 import { isDbConfigured } from "./db";
 import { runSportsGameOddsCheck } from "./providers/sportsgameodds";
+import { runOddsApiCheck } from "./providers/theoddsapi";
 import { collectionConfigured, previewRaw, runCollection } from "./collect";
 import { getConsensusFeed, getLiveFeed } from "./opportunities";
 import { betInputSchema, createBet, deleteBet, listBets, seedInitialBets, seedPrizePicks, seedPrizePicks2025, updateBet } from "./bets";
@@ -136,6 +137,15 @@ export function registerRoutes(_server: Server, app: Express) {
   app.get("/api/provider-check/sportsgameodds", async (_req, res) => {
     try {
       res.json(await runSportsGameOddsCheck());
+    } catch (error) {
+      res.status(500).json({ error: String(error) });
+    }
+  });
+
+  /** The Odds API battery — Hard Rock Bet is the headline check (~10 credits). */
+  app.get("/api/provider-check/theoddsapi", async (_req, res) => {
+    try {
+      res.json(await runOddsApiCheck());
     } catch (error) {
       res.status(500).json({ error: String(error) });
     }
