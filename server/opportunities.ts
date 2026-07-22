@@ -140,6 +140,63 @@ function blendGrades(parts: { grade: Grade; weightPct: number }[]): Grade {
   return "D";
 }
 
+function fmtAmerican(odds: number): string {
+  return odds > 0 ? `+${odds}` : String(odds);
+}
+
+function fmtTimeEt(d: Date): string {
+  return `${new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" }).format(d)} ET`;
+}
+
+/**
+ * Line movement for the surfaced book, computed from stored history rows
+ * (every collection run is a snapshot). Returns a plain-language summary
+ * plus whether the price has drifted worse for the surfaced side.
+ */
+export function describeMovement(
+  history: MarketRecord[],
+  side: "over" | "under",
+): { text: string; worsened: boolean } {
+  // One row per snapshot time (minute precision), oldest first.
+  const byMinute = new Map<number, MarketRecord>();
+  for (const row of history) {
+    const minute = Math.floor(row.retrievedAt.getTime() / 60000);
+    byMinute.set(minute, row);
+  }
+  const snaps = Array.from(byMinute.values()).sort((a, b) => a.retrievedAt.getTime() - b.retrievedAt.getTime());
+  if (snaps.length < 2) {
+    return { text: "First snapshot for this market — movement shows after the next collection run.", worsened: false };
+  }
+  const first = snaps[0];
+  const last = snaps[snaps.length - 1];
+  const odds = (r: MarketRecord) => (side === "over" ? r.overOdds : r.underOdds);
+  const firstOdds = odds(first);
+  const lastOdds = odds(last);
+  if (firstOdds == null || lastOdds == null) {
+    return { text: "Movement unavailable — this book did not price this side in earlier snapshots.", worsened: false };
+  }
+  const lineChanged = (first.line ?? 0) !== (last.line ?? 0);
+  const oddsChanged = firstOdds !== lastOdds;
+  if (!lineChanged && !oddsChanged) {
+    return {
+      text: `Unchanged across ${snaps.length} snapshots since ${fmtTimeEt(first.retrievedAt)}: ${first.line ?? ""} ${fmtAmerican(lastOdds)}`.trim(),
+      worsened: false,
+    };
+  }
+  let worsened = false;
+  try {
+    worsened = americanToImpliedProb(lastOdds) > americanToImpliedProb(firstOdds) + 0.005;
+  } catch {
+    worsened = false;
+  }
+  const fromPart = `${first.line ?? ""} ${fmtAmerican(firstOdds)}`.trim();
+  const toPart = `${last.line ?? ""} ${fmtAmerican(lastOdds)}`.trim();
+  return {
+    text: `${fromPart} → ${toPart} since ${fmtTimeEt(first.retrievedAt)} (${snaps.length} snapshots)`,
+    worsened,
+  };
+}
+
 export function buildOpportunities(
   rows: MarketRecord[],
   eventById: Map<number, Event>,
@@ -147,6 +204,7 @@ export function buildOpportunities(
   myBooks: Set<string> = new Set(),
   dayTrends: Trend[] = [],
   weights: GradeWeights = DEFAULT_GRADE_WEIGHTS,
+  historyRows: MarketRecord[] = [],
 ): Opportunity[] {
   // Group rows (one per bookmaker) into markets.
   const groups = new Map<string, MarketRecord[]>();
@@ -327,6 +385,18 @@ export function buildOpportunities(
       const crossProvider =
         best.quote.playerName != null && new Set(quotes.map((q) => q.source)).size > 1;
 
+      // Movement for the surfaced book across stored snapshots.
+      const bookHistory = historyRows.filter(
+        (r) =>
+          r.eventId === best.quote.eventId &&
+          r.marketType === best.quote.marketType &&
+          r.marketPeriod === best.quote.marketPeriod &&
+          bookKey(r) === book &&
+          (r.playerName ? normalizePlayerKey(r.playerName) : "") ===
+            (best.quote.playerName ? normalizePlayerKey(best.quote.playerName) : ""),
+      );
+      const movement = describeMovement(bookHistory.concat(best.quote), side);
+
       const playerPart = best.quote.playerName ? `${best.quote.playerName} ` : "";
       candidates.push({
         id: `live-${best.quote.eventId}-${slug(best.quote.marketType)}-${slug(best.quote.playerId ?? "team")}-${book}-${side}`,
@@ -372,6 +442,9 @@ export function buildOpportunities(
           ...(crossProvider
             ? ["This market was matched across two data providers — verify the books use the same settlement rules before trusting the edge."]
             : []),
+          ...(movement.worsened
+            ? ["The price has drifted worse for this side since earlier snapshots — the book may be correcting toward the market."]
+            : []),
           `${consensus.sourceCount} sources is not ${consensus.sourceCount} independent opinions — US retail books often mirror each other's prices.`,
         ],
         bottomLine: `The available line appears favorable against the ${consensus.sourceCount}-book market estimate. Treat it as provisional until matchup analysis is added.`,
@@ -379,7 +452,7 @@ export function buildOpportunities(
         dataConfidenceNote: `${consensus.sourceCount} books, ${disagreement} disagreement, collected ${consensus.lastUpdated}. Provider odds are ~10 minutes delayed on the current plan.`,
         freshness,
         lastUpdated: consensus.lastUpdated,
-        lineMovement: "Line movement tracking begins once multiple collection runs accumulate.",
+        lineMovement: `${bookName}: ${movement.text}`,
         sources: quotes.map((quote) => {
           let fair: number | null = null;
           try {
@@ -427,7 +500,11 @@ export interface LiveFeed {
   reason?: string;
 }
 
-async function getLatestRowsAndEvents(): Promise<{ rows: MarketRecord[]; eventById: Map<number, Event> } | null> {
+async function getLatestRowsAndEvents(): Promise<{
+  rows: MarketRecord[];
+  eventById: Map<number, Event>;
+  historyRows: MarketRecord[];
+} | null> {
   if (!isDbConfigured()) return null;
   const db = getDb();
   const newest = await db
@@ -445,7 +522,15 @@ async function getLatestRowsAndEvents(): Promise<{ rows: MarketRecord[]; eventBy
     const found = await db.select().from(events).where(eq(events.id, id)).limit(1);
     if (found.length > 0) eventById.set(id, found[0]);
   }
-  return { rows, eventById };
+
+  // Snapshot history for line movement: earlier collection runs from the
+  // last 24 hours for the same events. Every run is a stored snapshot.
+  const idSet = new Set(eventIds);
+  const historyCutoff = new Date(newest[0].retrievedAt.getTime() - 24 * 60 * 60 * 1000);
+  const history = await db.select().from(marketRecords).where(gt(marketRecords.retrievedAt, historyCutoff));
+  const historyRows = history.filter((r) => r.eventId != null && idSet.has(r.eventId));
+
+  return { rows, eventById, historyRows };
 }
 
 export async function getLiveFeed(): Promise<LiveFeed> {
@@ -469,7 +554,15 @@ export async function getLiveFeed(): Promise<LiveFeed> {
     dayTrends = [];
   }
   const weights = await getGradeWeights();
-  const opportunities = buildOpportunities(latest.rows, latest.eventById, new Date(), myBookmakers(), dayTrends, weights);
+  const opportunities = buildOpportunities(
+    latest.rows,
+    latest.eventById,
+    new Date(),
+    myBookmakers(),
+    dayTrends,
+    weights,
+    latest.historyRows,
+  );
   return { origin: "live", generatedAt, count: opportunities.length, opportunities };
 }
 

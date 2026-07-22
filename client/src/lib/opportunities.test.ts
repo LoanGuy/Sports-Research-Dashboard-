@@ -210,3 +210,40 @@ describe("buildOpportunities with uploaded trends", () => {
     expect(result[0].recentForm).toHaveLength(0);
   });
 });
+
+describe("line movement from stored snapshots", () => {
+  it("summarizes the surfaced book's earliest vs latest snapshot", () => {
+    const rows = [
+      makeRow("fanduel", -120, 100),
+      makeRow("draftkings", -118, -102),
+      makeRow("betmgm", -122, 102),
+      makeRow("hardrockbet", 105, -125),
+    ];
+    // Two hours earlier, Hard Rock had the Over at +125 (better than now).
+    const history = [
+      makeRow("hardrockbet", 125, -145, {
+        retrievedAt: new Date("2026-07-21T15:55:00Z"),
+        changedAt: new Date("2026-07-21T15:55:00Z"),
+      }),
+    ];
+    const result = buildOpportunities(rows, new Map([[1, makeEvent(1)]]), NOW, new Set(["hardrockbet"]), [], undefined, history);
+    expect(result.length).toBeGreaterThan(0);
+    const best = result[0];
+    expect(best.lineMovement).toContain("→");
+    expect(best.lineMovement).toContain("+125");
+    expect(best.lineMovement).toContain("+105");
+    // +125 → +105 is a worse price for the Over: warn about the drift.
+    expect(best.whatCouldGoWrong.join(" ")).toContain("drifted worse");
+  });
+
+  it("reports first-snapshot state when no history exists", () => {
+    const rows = [
+      makeRow("fanduel", -120, 100),
+      makeRow("draftkings", -118, -102),
+      makeRow("betmgm", -122, 102),
+      makeRow("hardrockbet", 110, -130),
+    ];
+    const result = buildOpportunities(rows, new Map([[1, makeEvent(1)]]), NOW, new Set(["hardrockbet"]));
+    expect(result[0].lineMovement).toContain("First snapshot");
+  });
+});
