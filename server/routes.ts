@@ -8,6 +8,7 @@ import { collectionConfigured, previewRaw, runCollection } from "./collect";
 import { getConsensusFeed, getLiveFeed } from "./opportunities";
 import { betInputSchema, createBet, deleteBet, listBets, seedInitialBets, seedPrizePicks, seedPrizePicks2025, updateBet } from "./bets";
 import { anthropicConfigured, createTrends, deleteTrend, listTrends, parseTrendImages, todayEt, trendInputSchema } from "./trends";
+import { getGradeWeights, gradeWeightsSchema, saveGradeWeights } from "./settings";
 import { normalizePlayerKey } from "./markets";
 import { z } from "zod";
 
@@ -32,6 +33,26 @@ export function registerRoutes(_server: Server, app: Express) {
         ANTHROPIC_API_KEY: Boolean(process.env.ANTHROPIC_API_KEY),
       },
     });
+  });
+
+  // ---- Settings (grading weights actually drive live grading) ----
+  app.get("/api/settings/weights", async (_req, res) => {
+    try {
+      res.json({ weights: await getGradeWeights(), persisted: isDbConfigured() });
+    } catch (error) {
+      res.status(500).json({ error: String(error) });
+    }
+  });
+
+  app.put("/api/settings/weights", async (req, res) => {
+    try {
+      if (!isDbConfigured()) return res.status(503).json({ error: "Database not configured" });
+      const parsed = gradeWeightsSchema.safeParse(req.body?.weights);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      res.json({ weights: await saveGradeWeights(parsed.data) });
+    } catch (error) {
+      res.status(500).json({ error: String(error) });
+    }
   });
 
   // ---- Trend research (screenshot uploads + manual entry) ----

@@ -18,6 +18,10 @@ import {
  */
 export function OpportunityCard({ opportunity }: { opportunity: Opportunity }) {
   const o = opportunity;
+  // What actually produced this grade — keeps the letter honest at a glance.
+  const trendBacked = o.categories.some(
+    (c) => (c.key === "form" || c.key === "matchup") && c.grade !== "Incomplete",
+  );
   return (
     <Link
       href={`/opportunity/${o.id}`}
@@ -36,7 +40,14 @@ export function OpportunityCard({ opportunity }: { opportunity: Opportunity }) {
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
-          <GradeBadge grade={o.grade} label={o.gradeLabel} />
+          <div className="flex flex-col items-end gap-0.5">
+            <GradeBadge grade={o.grade} label={o.gradeLabel} />
+            {o.origin === "live" ? (
+              <span className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
+                {trendBacked ? "price + trends" : "price only"}
+              </span>
+            ) : null}
+          </div>
           <ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden />
         </div>
       </div>

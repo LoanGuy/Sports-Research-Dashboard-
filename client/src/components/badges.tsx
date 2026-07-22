@@ -106,7 +106,14 @@ const freshnessStyles: Record<Freshness, string> = {
 
 export function FreshnessBadge({ freshness, updated }: { freshness: Freshness; updated?: string }) {
   return (
-    <span className={cn(badgeBase, freshnessStyles[freshness])}>
+    <span
+      className={cn(badgeBase, freshnessStyles[freshness])}
+      title={
+        freshness === "delayed"
+          ? "The odds feed on the current plan runs about 10 minutes behind the sportsbooks. The time shows when this snapshot was collected."
+          : undefined
+      }
+    >
       {freshnessLabels[freshness]}
       {updated ? <span className="opacity-70">· {updated}</span> : null}
     </span>

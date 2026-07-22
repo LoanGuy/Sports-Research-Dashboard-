@@ -19,6 +19,7 @@ import { americanToImpliedProb, median, noVigFromAmerican } from "@shared/odds";
 import { normalizePlayerKey } from "./markets";
 import { getDb, isDbConfigured } from "./db";
 import { listTrends, todayEt, type TrendSignal } from "./trends";
+import { DEFAULT_GRADE_WEIGHTS, getGradeWeights, type GradeWeights } from "./settings";
 
 const EDGE_THRESHOLD_PTS = 1.0;
 const MAX_OPPORTUNITIES = 30;
@@ -145,6 +146,7 @@ export function buildOpportunities(
   now: Date,
   myBooks: Set<string> = new Set(),
   dayTrends: Trend[] = [],
+  weights: GradeWeights = DEFAULT_GRADE_WEIGHTS,
 ): Opportunity[] {
   // Group rows (one per bookmaker) into markets.
   const groups = new Map<string, MarketRecord[]>();
@@ -266,26 +268,26 @@ export function buildOpportunities(
             key: "form",
             label: "Recent form",
             grade: signalGrade(formSignal.hits, formSignal.total),
-            weightPct: 15,
+            weightPct: weights.form,
             note: `${formSignal.label} (${formSignal.hits}/${formSignal.total}) — from your uploaded trend.`,
           }
-        : { key: "form", label: "Recent form", grade: "Incomplete", weightPct: 15, note: "No trend uploaded for this player today. Add one on the Trends page." };
+        : { key: "form", label: "Recent form", grade: "Incomplete", weightPct: weights.form, note: "No trend uploaded for this player today. Add one on the Trends page." };
       const matchupCategory: GradeCategory = matchupSignal
         ? {
             key: "matchup",
             label: "Matchup",
             grade: signalGrade(matchupSignal.hits, matchupSignal.total),
-            weightPct: 25,
+            weightPct: weights.matchup,
             note: `${matchupSignal.label} (${matchupSignal.hits}/${matchupSignal.total}) — from your uploaded trend.`,
           }
-        : { key: "matchup", label: "Matchup", grade: "Incomplete", weightPct: 25, note: "Not yet analyzed — upload a versus-opponent trend or wait for the stats phase." };
+        : { key: "matchup", label: "Matchup", grade: "Incomplete", weightPct: weights.matchup, note: "Not yet analyzed — upload a versus-opponent trend or wait for the stats phase." };
 
       const categories: GradeCategory[] = [
         {
           key: "market",
           label: "Market value",
           grade: mGrade,
-          weightPct: 30,
+          weightPct: weights.market,
           note: `${bookName}'s price needs a ${(best.breakEven * 100).toFixed(1)}% win rate. ${consensus.sourceCount} books put the fair chance near ${(fairForSide * 100).toFixed(1)}%.`,
         },
         matchupCategory,
@@ -294,7 +296,7 @@ export function buildOpportunities(
           key: "conditions",
           label: "Conditions",
           grade: "Incomplete",
-          weightPct: 10,
+          weightPct: weights.conditions,
           note: trend?.note
             ? `From your upload: ${trend.note}. Not independently verified.`
             : "Not yet analyzed — weather and lineups land in a later phase.",
@@ -303,19 +305,27 @@ export function buildOpportunities(
           key: "data",
           label: "Data confidence",
           grade: dGrade,
-          weightPct: 15,
+          weightPct: weights.data,
           note: `${consensus.sourceCount} books compared; disagreement is ${disagreement}. Odds on this data plan are about 10 minutes delayed.`,
         },
-        { key: "risk", label: "Risk", grade: "C", weightPct: 5, note: "Price-only signal. Without matchup and lineup context, treat the edge as provisional." },
+        {
+          key: "risk",
+          label: "Risk",
+          grade: "Incomplete",
+          weightPct: weights.risk,
+          note: "No risk model yet — lineup, pitch-count, and volatility checks land in a later phase.",
+        },
       ];
 
-      // Overall grade: price alone when no trend matches (unchanged
-      // behavior); a weighted blend of price + trend categories otherwise.
-      const overallGrade = blendGrades([
-        { grade: mGrade, weightPct: 30 },
-        { grade: formCategory.grade, weightPct: 15 },
-        { grade: matchupCategory.grade, weightPct: 25 },
-      ]);
+      // Overall grade: weighted blend of every category that has real
+      // data behind it, using the user's configured weights. Incomplete
+      // categories are excluded rather than faked.
+      const overallGrade = blendGrades(categories.map((c) => ({ grade: c.grade, weightPct: c.weightPct })));
+
+      // Integrity flag: a player-prop consensus merged across providers
+      // may mix settlement rules — surface it instead of trusting it.
+      const crossProvider =
+        best.quote.playerName != null && new Set(quotes.map((q) => q.source)).size > 1;
 
       const playerPart = best.quote.playerName ? `${best.quote.playerName} ` : "";
       candidates.push({
@@ -359,6 +369,10 @@ export function buildOpportunities(
           ...(isMoneyline && best.odds >= -120
             ? ["Journal reminder: dog/near-even moneylines are your least successful logged bet shape."]
             : []),
+          ...(crossProvider
+            ? ["This market was matched across two data providers — verify the books use the same settlement rules before trusting the edge."]
+            : []),
+          `${consensus.sourceCount} sources is not ${consensus.sourceCount} independent opinions — US retail books often mirror each other's prices.`,
         ],
         bottomLine: `The available line appears favorable against the ${consensus.sourceCount}-book market estimate. Treat it as provisional until matchup analysis is added.`,
         dataConfidence: dGrade === "A" ? "high" : dGrade === "B" ? "medium" : "low",
@@ -383,7 +397,7 @@ export function buildOpportunities(
             lastUpdated: consensus.lastUpdated,
           };
         }),
-        matchNeedsReview: false,
+        matchNeedsReview: crossProvider,
         weather: null,
         lineupStatus: null,
         lineupNote: null,
@@ -454,7 +468,8 @@ export async function getLiveFeed(): Promise<LiveFeed> {
   } catch {
     dayTrends = [];
   }
-  const opportunities = buildOpportunities(latest.rows, latest.eventById, new Date(), myBookmakers(), dayTrends);
+  const weights = await getGradeWeights();
+  const opportunities = buildOpportunities(latest.rows, latest.eventById, new Date(), myBookmakers(), dayTrends, weights);
   return { origin: "live", generatedAt, count: opportunities.length, opportunities };
 }
 

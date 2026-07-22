@@ -157,7 +157,8 @@ export default function ReportPage() {
           </div>
           <p className="mt-2 text-[12px] leading-4 text-muted-foreground">
             Multi-book no-vig consensus · median fair probability · vig removed per book before
-            comparing. Grades reflect market value and data confidence only.
+            comparing. Grades reflect price vs. market, data confidence, and uploaded trends —
+            matchup, lineup, and weather analysis are not applied yet.
           </p>
         </div>
 
