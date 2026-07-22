@@ -10,6 +10,7 @@ import { events, gameContext, playerGameLogs, marketRecords, type GameContext, t
 import { getDb, isDbConfigured } from "./db";
 import { normalizePlayerKey } from "./markets";
 import { todayEt } from "./trends";
+import { fetchStadiumForecast, stadiumForTeam, type StoredWeather } from "./weather";
 
 const API = "https://statsapi.mlb.com/api/v1";
 
@@ -255,7 +256,9 @@ export async function refreshMlbContext(): Promise<ContextSummary> {
 
   let gamesMatched = 0;
   let lineupsPosted = 0;
+  let forecasts = 0;
   const matchedByEvent = new Map<number, ScheduleGame>();
+  const weatherCache = new Map<string, StoredWeather | null>();
   for (const event of upcoming) {
     const game = schedule.find(
       (g) => teamNamesMatch(g.homeName, event.homeTeam) && teamNamesMatch(g.awayName, event.awayTeam),
@@ -264,6 +267,24 @@ export async function refreshMlbContext(): Promise<ContextSummary> {
     gamesMatched += 1;
     if (game.homeLineup.length > 0 || game.awayLineup.length > 0) lineupsPosted += 1;
     matchedByEvent.set(event.id, game);
+
+    // NWS forecast at first pitch (best-effort; one lookup per stadium).
+    let weather: StoredWeather | null = null;
+    const stadium = stadiumForTeam(event.homeTeam);
+    if (stadium) {
+      if (weatherCache.has(stadium.venue)) {
+        weather = weatherCache.get(stadium.venue) ?? null;
+      } else {
+        try {
+          weather = await fetchStadiumForecast(stadium, event.startTime);
+        } catch {
+          weather = null;
+        }
+        weatherCache.set(stadium.venue, weather);
+      }
+      if (weather) forecasts += 1;
+    }
+
     await db
       .insert(gameContext)
       .values({
@@ -274,6 +295,7 @@ export async function refreshMlbContext(): Promise<ContextSummary> {
         awayProbable: game.awayProbable,
         homeLineup: game.homeLineup,
         awayLineup: game.awayLineup,
+        weather,
         capturedAt: new Date(),
       })
       .onConflictDoUpdate({
@@ -285,6 +307,7 @@ export async function refreshMlbContext(): Promise<ContextSummary> {
           awayProbable: game.awayProbable,
           homeLineup: game.homeLineup,
           awayLineup: game.awayLineup,
+          weather,
           capturedAt: new Date(),
         },
       });
@@ -357,7 +380,7 @@ export async function refreshMlbContext(): Promise<ContextSummary> {
 
   return {
     ok: true,
-    message: `MLB context: matched ${gamesMatched} game(s), lineups posted for ${lineupsPosted}, game logs stored for ${playersLogged} player(s).`,
+    message: `MLB context: matched ${gamesMatched} game(s), lineups posted for ${lineupsPosted}, weather for ${forecasts}, game logs stored for ${playersLogged} player(s).`,
     gamesMatched,
     lineupsPosted,
     playersLogged,

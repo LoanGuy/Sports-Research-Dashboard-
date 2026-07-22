@@ -167,6 +167,7 @@ export const gameContext = pgTable("game_context", {
   awayProbable: jsonb("away_probable"),
   homeLineup: jsonb("home_lineup").notNull(), // [{ id, fullName, order? }]
   awayLineup: jsonb("away_lineup").notNull(),
+  weather: jsonb("weather"), // StoredWeather | null (NWS forecast at first pitch)
   capturedAt: timestamp("captured_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

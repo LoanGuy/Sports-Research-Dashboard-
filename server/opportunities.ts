@@ -22,7 +22,7 @@ import {
   type PlayerGameLog,
   type Trend,
 } from "@shared/schema";
-import type { Consensus, Grade, GradeCategory, LineupStatus, Opportunity, RecentFormItem } from "@shared/types";
+import type { Consensus, Grade, GradeCategory, LineupStatus, Opportunity, RecentFormItem, WeatherInfo } from "@shared/types";
 import { americanToImpliedProb, median, noVigFromAmerican } from "@shared/odds";
 import { normalizePlayerKey } from "./markets";
 import { getDb, isDbConfigured } from "./db";
@@ -36,6 +36,7 @@ import {
   type LineupSlot,
   type ProbablePitcher,
 } from "./mlb";
+import { conditionsFromWeather, roofStatusOf, type StoredWeather } from "./weather";
 
 const EDGE_THRESHOLD_PTS = 1.0;
 const MAX_OPPORTUNITIES = 30;
@@ -454,6 +455,27 @@ export function buildOpportunities(
 
       const dGrade = confidenceCap ? worseGrade(dGradeRaw, confidenceCap) : dGradeRaw;
 
+      // Conditions from the stored NWS forecast (spec §19). Weather is one
+      // factor; without a forecast the category stays Incomplete.
+      const storedWeather = (ctx?.weather ?? null) as StoredWeather | null;
+      const conditions = storedWeather ? conditionsFromWeather(storedWeather) : null;
+      const weatherInfo: WeatherInfo | null = storedWeather
+        ? {
+            venue: storedWeather.venue,
+            roofStatus: roofStatusOf(storedWeather),
+            tempF: storedWeather.tempF,
+            windMph: storedWeather.windMph,
+            windDirection: storedWeather.windDirection,
+            gustMph: null,
+            humidityPct: null,
+            rainProbPct: storedWeather.rainProbPct,
+            note: conditions?.note ?? "",
+            observedAt: storedWeather.capturedAt,
+            freshness:
+              Date.now() - Date.parse(storedWeather.capturedAt) < 90 * 60 * 1000 ? "fresh" : "stale",
+          }
+        : null;
+
       const categories: GradeCategory[] = [
         {
           key: "market",
@@ -464,15 +486,23 @@ export function buildOpportunities(
         },
         matchupCategory,
         formCategory,
-        {
-          key: "conditions",
-          label: "Conditions",
-          grade: "Incomplete",
-          weightPct: weights.conditions,
-          note: trend?.note
-            ? `From your upload: ${trend.note}. Not independently verified.`
-            : "Not yet analyzed — weather and lineups land in a later phase.",
-        },
+        conditions
+          ? {
+              key: "conditions",
+              label: "Conditions",
+              grade: conditions.grade,
+              weightPct: weights.conditions,
+              note: `${conditions.note} (National Weather Service forecast for first pitch.)`,
+            }
+          : {
+              key: "conditions",
+              label: "Conditions",
+              grade: "Incomplete",
+              weightPct: weights.conditions,
+              note: trend?.note
+                ? `From your upload: ${trend.note}. Not independently verified.`
+                : "No forecast stored for this game yet — refresh market data to fetch one.",
+            },
         {
           key: "data",
           label: "Data confidence",
@@ -564,6 +594,13 @@ export function buildOpportunities(
             ? ["The price has drifted worse for this side since earlier snapshots — the book may be correcting toward the market."]
             : []),
           ...riskContext,
+          ...(storedWeather &&
+          storedWeather.roof !== "fixed" &&
+          storedWeather.rainProbPct != null &&
+          storedWeather.rainProbPct >= 40 &&
+          statGroup === "pitching"
+            ? [`Rain chance is ${storedWeather.rainProbPct}% — a delay or early exit is a real risk for pitcher props.`]
+            : []),
           `${consensus.sourceCount} sources is not ${consensus.sourceCount} independent opinions — US retail books often mirror each other's prices.`,
         ],
         bottomLine: `The available line appears favorable against the ${consensus.sourceCount}-book market estimate. Treat it as provisional until matchup analysis is added.`,
@@ -590,7 +627,7 @@ export function buildOpportunities(
           };
         }),
         matchNeedsReview: crossProvider || contextReviewFlag,
-        weather: null,
+        weather: weatherInfo,
         lineupStatus,
         lineupNote,
         novig: null,
