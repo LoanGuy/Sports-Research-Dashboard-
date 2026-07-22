@@ -173,7 +173,9 @@ describe("buildOpportunities with uploaded trends", () => {
         { kind: "vs_opponent", label: "Hit in 1 of last 1 vs PIT", hits: 1, total: 1 },
       ],
     };
-    const result = buildOpportunities(rows, new Map([[1, makeEvent(1)]]), NOW, new Set(["hardrockbet"]), [trend as never]);
+    const result = buildOpportunities(rows, new Map([[1, makeEvent(1)]]), NOW, new Set(["hardrockbet"]), {
+      dayTrends: [trend as never],
+    });
     expect(result.length).toBeGreaterThan(0);
     const best = result[0];
     const byKey = Object.fromEntries(best.categories.map((c) => [c.key, c.grade]));
@@ -203,7 +205,9 @@ describe("buildOpportunities with uploaded trends", () => {
       side: "under", // surfaced side is Over — must not match
       signals: [{ kind: "recent", label: "Hit in 9 of last 9", hits: 9, total: 9 }],
     };
-    const result = buildOpportunities(rows, new Map([[1, makeEvent(1)]]), NOW, new Set(["hardrockbet"]), [trend as never]);
+    const result = buildOpportunities(rows, new Map([[1, makeEvent(1)]]), NOW, new Set(["hardrockbet"]), {
+      dayTrends: [trend as never],
+    });
     expect(result.length).toBeGreaterThan(0);
     const byKey = Object.fromEntries(result[0].categories.map((c) => [c.key, c.grade]));
     expect(byKey.form).toBe("Incomplete");
@@ -226,7 +230,9 @@ describe("line movement from stored snapshots", () => {
         changedAt: new Date("2026-07-21T15:55:00Z"),
       }),
     ];
-    const result = buildOpportunities(rows, new Map([[1, makeEvent(1)]]), NOW, new Set(["hardrockbet"]), [], undefined, history);
+    const result = buildOpportunities(rows, new Map([[1, makeEvent(1)]]), NOW, new Set(["hardrockbet"]), {
+      historyRows: history,
+    });
     expect(result.length).toBeGreaterThan(0);
     const best = result[0];
     expect(best.lineMovement).toContain("→");

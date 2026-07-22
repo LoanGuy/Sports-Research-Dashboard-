@@ -153,10 +153,44 @@ export const trends = pgTable(
   (t) => [index("trends_game_date_idx").on(t.gameDate)],
 );
 
+/**
+ * MLB game context from the free MLB Stats API: probable pitchers and
+ * (once posted) confirmed lineups, matched to our events. Drives lineup
+ * gating and pitcher-confirmation notes in grading.
+ */
+export const gameContext = pgTable("game_context", {
+  id: serial("id").primaryKey(),
+  eventId: integer("event_id").notNull().unique(),
+  gamePk: integer("game_pk"),
+  gameDate: text("game_date"),
+  homeProbable: jsonb("home_probable"), // { id, fullName } | null
+  awayProbable: jsonb("away_probable"),
+  homeLineup: jsonb("home_lineup").notNull(), // [{ id, fullName, order? }]
+  awayLineup: jsonb("away_lineup").notNull(),
+  capturedAt: timestamp("captured_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Per-player recent game logs (verified stats, not screenshots). */
+export const playerGameLogs = pgTable(
+  "player_game_logs",
+  {
+    id: serial("id").primaryKey(),
+    playerId: integer("player_id").notNull(),
+    playerKey: text("player_key").notNull(),
+    statGroup: text("stat_group").notNull(), // "hitting" | "pitching"
+    season: text("season"),
+    logs: jsonb("logs").notNull(), // [{ date, stats: {...} }] newest last
+    capturedAt: timestamp("captured_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("player_logs_key_idx").on(t.playerKey, t.statGroup)],
+);
+
 export type Bet = typeof bets.$inferSelect;
 export type NewBet = typeof bets.$inferInsert;
 export type Trend = typeof trends.$inferSelect;
 export type NewTrend = typeof trends.$inferInsert;
+export type GameContext = typeof gameContext.$inferSelect;
+export type PlayerGameLog = typeof playerGameLogs.$inferSelect;
 
 export type Event = typeof events.$inferSelect;
 export type NewEvent = typeof events.$inferInsert;

@@ -13,13 +13,29 @@
  * Incomplete — shown as such, never faked.
  */
 import { desc, eq, gt } from "drizzle-orm";
-import { events, marketRecords, type Event, type MarketRecord, type Trend } from "@shared/schema";
-import type { Consensus, Grade, GradeCategory, Opportunity, RecentFormItem } from "@shared/types";
+import {
+  events,
+  marketRecords,
+  type Event,
+  type GameContext,
+  type MarketRecord,
+  type PlayerGameLog,
+  type Trend,
+} from "@shared/schema";
+import type { Consensus, Grade, GradeCategory, LineupStatus, Opportunity, RecentFormItem } from "@shared/types";
 import { americanToImpliedProb, median, noVigFromAmerican } from "@shared/odds";
 import { normalizePlayerKey } from "./markets";
 import { getDb, isDbConfigured } from "./db";
 import { listTrends, todayEt, type TrendSignal } from "./trends";
 import { DEFAULT_GRADE_WEIGHTS, getGradeWeights, type GradeWeights } from "./settings";
+import {
+  loadContext,
+  statGroupForMarket,
+  verifiedForm,
+  type GameLogEntry,
+  type LineupSlot,
+  type ProbablePitcher,
+} from "./mlb";
 
 const EDGE_THRESHOLD_PTS = 1.0;
 const MAX_OPPORTUNITIES = 30;
@@ -140,6 +156,15 @@ function blendGrades(parts: { grade: Grade; weightPct: number }[]): Grade {
   return "D";
 }
 
+const GRADE_RANK: Record<string, number> = { A: 0, B: 1, C: 2, D: 3 };
+
+/** The worse (higher-rank) of two letter grades — used to cap confidence. */
+function worseGrade(a: Grade, b: Grade): Grade {
+  if (a === "Incomplete") return b;
+  if (b === "Incomplete") return a;
+  return GRADE_RANK[a] >= GRADE_RANK[b] ? a : b;
+}
+
 function fmtAmerican(odds: number): string {
   return odds > 0 ? `+${odds}` : String(odds);
 }
@@ -197,15 +222,26 @@ export function describeMovement(
   };
 }
 
+export interface BuildOptions {
+  dayTrends?: Trend[];
+  weights?: GradeWeights;
+  historyRows?: MarketRecord[];
+  contexts?: GameContext[];
+  playerLogs?: PlayerGameLog[];
+}
+
 export function buildOpportunities(
   rows: MarketRecord[],
   eventById: Map<number, Event>,
   now: Date,
   myBooks: Set<string> = new Set(),
-  dayTrends: Trend[] = [],
-  weights: GradeWeights = DEFAULT_GRADE_WEIGHTS,
-  historyRows: MarketRecord[] = [],
+  opts: BuildOptions = {},
 ): Opportunity[] {
+  const dayTrends = opts.dayTrends ?? [];
+  const weights = opts.weights ?? DEFAULT_GRADE_WEIGHTS;
+  const historyRows = opts.historyRows ?? [];
+  const ctxByEvent = new Map((opts.contexts ?? []).map((c) => [c.eventId, c] as const));
+  const logRows = opts.playerLogs ?? [];
   // Group rows (one per bookmaker) into markets.
   const groups = new Map<string, MarketRecord[]>();
   for (const row of rows) {
@@ -305,7 +341,7 @@ export function buildOpportunities(
           ? consensus
           : { ...consensus, fairProb: 1 - consensusProb, lowProb: 1 - high, highProb: 1 - low };
       const mGrade = marketGrade(best.edgePts);
-      const dGrade = confidenceGrade(consensus.sourceCount, disagreement);
+      const dGradeRaw = confidenceGrade(consensus.sourceCount, disagreement);
 
       // Match the user's uploaded trend research for this player + market
       // + side. Trends grade "Recent form" and (when a versus-opponent
@@ -319,9 +355,85 @@ export function buildOpportunities(
       const trendSignals: TrendSignal[] = trend ? ((trend.signals as TrendSignal[]) ?? []) : [];
       const formSignal = trendSignals.find((s) => s.kind === "recent") ?? trendSignals[0];
       const matchupSignal = trendSignals.find((s) => s.kind === "vs_opponent");
-      const recentForm: RecentFormItem[] = trendSignals.map((s) => ({ label: s.label, hits: s.hits, total: s.total }));
 
-      const formCategory: GradeCategory = formSignal
+      // Verified recent form from stored MLB game logs (preferred over
+      // screenshot trends when available).
+      const statGroup = rowPlayerKey ? statGroupForMarket(best.quote.marketType) : null;
+      const logRow =
+        statGroup && rowPlayerKey
+          ? logRows.find((l) => l.statGroup === statGroup && playerKeysMatch(l.playerKey, rowPlayerKey))
+          : undefined;
+      const verified =
+        logRow && best.quote.line != null
+          ? verifiedForm(logRow.logs as GameLogEntry[], best.quote.marketType, side, best.quote.line)
+          : null;
+
+      const recentForm: RecentFormItem[] = [
+        ...(verified ? [{ label: verified.label, hits: verified.hits, total: verified.total }] : []),
+        ...trendSignals.map((s) => ({ label: s.label, hits: s.hits, total: s.total })),
+      ];
+
+      // Lineup / probable-starter gating from MLB game context.
+      const ctx = best.quote.eventId != null ? ctxByEvent.get(best.quote.eventId) : undefined;
+      let lineupStatus: LineupStatus | null = null;
+      let lineupNote: string | null = null;
+      let confidenceCap: Grade | null = null;
+      let contextReviewFlag = false;
+      const whyContext: string[] = [];
+      const riskContext: string[] = [];
+      if (ctx && rowPlayerKey && statGroup === "hitting") {
+        const lineup = [...((ctx.homeLineup as LineupSlot[]) ?? []), ...((ctx.awayLineup as LineupSlot[]) ?? [])];
+        if (lineup.length === 0) {
+          lineupStatus = "unavailable";
+          lineupNote = "Lineups are not posted yet for this game (MLB Stats API).";
+          confidenceCap = "C";
+          riskContext.push(
+            "Lineup not posted yet — a batter prop carries extra uncertainty until this player is confirmed in the lineup.",
+          );
+        } else {
+          const slot = lineup.find((p) => playerKeysMatch(normalizePlayerKey(p.fullName), rowPlayerKey));
+          if (slot) {
+            lineupStatus = "confirmed";
+            lineupNote = slot.order
+              ? `In the posted lineup, batting ${slot.order} (MLB Stats API).`
+              : "In the posted lineup (MLB Stats API).";
+            whyContext.push(lineupNote);
+          } else {
+            lineupStatus = "not_in_lineup";
+            lineupNote = "Not in the posted lineup (MLB Stats API) — this prop may not settle.";
+            confidenceCap = "D";
+            contextReviewFlag = true;
+            riskContext.push("This player is NOT in the posted lineup — verify before considering this market.");
+          }
+        }
+      }
+      if (ctx && rowPlayerKey && statGroup === "pitching") {
+        const probables = [ctx.homeProbable, ctx.awayProbable].filter(Boolean) as ProbablePitcher[];
+        if (probables.length > 0) {
+          const starter = probables.find((p) => playerKeysMatch(normalizePlayerKey(p.fullName), rowPlayerKey));
+          if (starter) {
+            lineupStatus = "confirmed";
+            lineupNote = "Listed as a probable starter for this game (MLB Stats API).";
+            whyContext.push(lineupNote);
+          } else {
+            lineupStatus = "not_in_lineup";
+            lineupNote = "Not one of this game's listed probable starters (MLB Stats API).";
+            confidenceCap = "C";
+            contextReviewFlag = true;
+            riskContext.push("This pitcher is not a listed probable starter — verify the starter before trusting this prop.");
+          }
+        }
+      }
+
+      const formCategory: GradeCategory = verified
+        ? {
+            key: "form",
+            label: "Recent form",
+            grade: signalGrade(verified.hits, verified.total),
+            weightPct: weights.form,
+            note: `${verified.label}.`,
+          }
+        : formSignal
         ? {
             key: "form",
             label: "Recent form",
@@ -339,6 +451,8 @@ export function buildOpportunities(
             note: `${matchupSignal.label} (${matchupSignal.hits}/${matchupSignal.total}) — from your uploaded trend.`,
           }
         : { key: "matchup", label: "Matchup", grade: "Incomplete", weightPct: weights.matchup, note: "Not yet analyzed — upload a versus-opponent trend or wait for the stats phase." };
+
+      const dGrade = confidenceCap ? worseGrade(dGradeRaw, confidenceCap) : dGradeRaw;
 
       const categories: GradeCategory[] = [
         {
@@ -364,7 +478,9 @@ export function buildOpportunities(
           label: "Data confidence",
           grade: dGrade,
           weightPct: weights.data,
-          note: `${consensus.sourceCount} books compared; disagreement is ${disagreement}. Odds on this data plan are about 10 minutes delayed.`,
+          note: `${consensus.sourceCount} books compared; disagreement is ${disagreement}. Odds on this data plan are about 10 minutes delayed.${
+            confidenceCap ? ` Capped at ${confidenceCap}: ${lineupNote ?? "lineup context is uncertain."}` : ""
+          }`,
         },
         {
           key: "risk",
@@ -426,6 +542,8 @@ export function buildOpportunities(
         whyItGradesWell: [
           `${consensus.sourceCount} sportsbooks were compared, with each book's vig removed separately before taking the median.`,
           `${bookName} posts the best available price on the ${sideLabel} side of this market.`,
+          ...whyContext,
+          ...(verified ? [`${verified.label}.`] : []),
           ...(trend
             ? [`Your uploaded trend agrees: ${trendSignals.map((s) => s.label).join("; ") || trend.market}.`]
             : []),
@@ -445,6 +563,7 @@ export function buildOpportunities(
           ...(movement.worsened
             ? ["The price has drifted worse for this side since earlier snapshots — the book may be correcting toward the market."]
             : []),
+          ...riskContext,
           `${consensus.sourceCount} sources is not ${consensus.sourceCount} independent opinions — US retail books often mirror each other's prices.`,
         ],
         bottomLine: `The available line appears favorable against the ${consensus.sourceCount}-book market estimate. Treat it as provisional until matchup analysis is added.`,
@@ -470,10 +589,10 @@ export function buildOpportunities(
             lastUpdated: consensus.lastUpdated,
           };
         }),
-        matchNeedsReview: crossProvider,
+        matchNeedsReview: crossProvider || contextReviewFlag,
         weather: null,
-        lineupStatus: null,
-        lineupNote: null,
+        lineupStatus,
+        lineupNote,
         novig: null,
         prizepicks: null,
       });
@@ -554,15 +673,25 @@ export async function getLiveFeed(): Promise<LiveFeed> {
     dayTrends = [];
   }
   const weights = await getGradeWeights();
-  const opportunities = buildOpportunities(
-    latest.rows,
-    latest.eventById,
-    new Date(),
-    myBookmakers(),
+  // MLB context (probables/lineups/game logs) — absent tables or a fresh
+  // deploy must never break the feed.
+  let contexts: GameContext[] = [];
+  let playerLogs: PlayerGameLog[] = [];
+  try {
+    const ctx = await loadContext();
+    contexts = ctx.contexts;
+    playerLogs = ctx.logs;
+  } catch {
+    contexts = [];
+    playerLogs = [];
+  }
+  const opportunities = buildOpportunities(latest.rows, latest.eventById, new Date(), myBookmakers(), {
     dayTrends,
     weights,
-    latest.historyRows,
-  );
+    historyRows: latest.historyRows,
+    contexts,
+    playerLogs,
+  });
   return { origin: "live", generatedAt, count: opportunities.length, opportunities };
 }
 

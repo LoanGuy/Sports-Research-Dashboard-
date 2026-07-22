@@ -10,6 +10,7 @@ import { and, eq, gte, lte } from "drizzle-orm";
 import { auditLog, events, marketRecords } from "@shared/schema";
 import { getDb, isDbConfigured } from "./db";
 import { parseOddsApiEvents, parseSgoEvents, type ParsedEvent, type ParsedMarketRow } from "./markets";
+import { mlbContextEnabled, refreshMlbContext } from "./mlb";
 import { findOddsApiKey } from "./providers/theoddsapi";
 
 const BASE = "https://api.sportsgameodds.com";
@@ -167,9 +168,20 @@ export async function runCollection(): Promise<CollectionSummary> {
   // Source #2: The Odds API — Hard Rock Bet et al. Runs when a key exists.
   const oddsApi = await runOddsApiCollection(retrievedAt);
 
+  // MLB context (probables, lineups, game logs) — free API, best-effort.
+  let contextNote = "";
+  if (mlbContextEnabled()) {
+    try {
+      const ctx = await refreshMlbContext();
+      contextNote = ` ${ctx.message}`;
+    } catch (error) {
+      contextNote = ` MLB context refresh failed: ${error instanceof Error ? error.message : String(error)}`;
+    }
+  }
+
   const message = `Collected ${rowsStored} rows from ${parsedEvents.length} MLB event(s) via SportsGameOdds${
     oddsApi ? `; ${oddsApi.rows} rows from ${oddsApi.events} event(s) via The Odds API (credits left: ${oddsApi.creditsRemaining ?? "?"})` : ""
-  }.`;
+  }.${contextNote}`;
   await safeAudit("job", message, { rowsStored, events: parsedEvents.length, skippedStatIds, oddsApi });
   return {
     ok: true,
