@@ -10,6 +10,7 @@ import { betInputSchema, createBet, deleteBet, listBets, seedInitialBets, seedPr
 import { anthropicConfigured, createTrends, deleteTrend, listTrends, parseTrendImages, todayEt, trendInputSchema } from "./trends";
 import { getGradeWeights, gradeWeightsSchema, saveGradeWeights } from "./settings";
 import { refreshMlbContext } from "./mlb";
+import { calibrate, listAlerts, listSnapshots, markAlertsRead, settleSnapshot } from "./history";
 import { normalizePlayerKey } from "./markets";
 import { z } from "zod";
 
@@ -161,6 +162,52 @@ export function registerRoutes(_server: Server, app: Express) {
   app.get("/api/consensus", async (_req, res) => {
     try {
       res.json(await getConsensusFeed());
+    } catch (error) {
+      res.status(500).json({ error: String(error) });
+    }
+  });
+
+  // ---- History, calibration, alerts ----
+
+  /** Snapshots of surfaced opportunities (last ?days=14) + calibration. */
+  app.get("/api/history", async (req, res) => {
+    try {
+      if (!isDbConfigured()) return res.status(503).json({ error: "Database not configured" });
+      const days = Math.max(1, Math.min(90, Number(req.query.days ?? 14)));
+      const snapshots = await listSnapshots(days);
+      res.json({ days, snapshots, calibration: calibrate(snapshots) });
+    } catch (error) {
+      res.status(500).json({ error: String(error) });
+    }
+  });
+
+  /** Manually settle a snapshot: { result: "won"|"lost"|"push"|"void"|null }. */
+  app.patch("/api/history/:id/settle", async (req, res) => {
+    try {
+      if (!isDbConfigured()) return res.status(503).json({ error: "Database not configured" });
+      const parsed = z.object({ result: z.enum(["won", "lost", "push", "void"]).nullable() }).safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      await settleSnapshot(Number(req.params.id), parsed.data.result);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: String(error) });
+    }
+  });
+
+  app.get("/api/alerts", async (_req, res) => {
+    try {
+      if (!isDbConfigured()) return res.status(503).json({ error: "Database not configured" });
+      res.json(await listAlerts());
+    } catch (error) {
+      res.status(500).json({ error: String(error) });
+    }
+  });
+
+  app.post("/api/alerts/read", async (_req, res) => {
+    try {
+      if (!isDbConfigured()) return res.status(503).json({ error: "Database not configured" });
+      await markAlertsRead();
+      res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: String(error) });
     }

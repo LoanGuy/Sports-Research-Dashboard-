@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
-import { Activity, Calculator, Info, LineChart, NotebookPen, Settings } from "lucide-react";
+import { Activity, Bell, Calculator, Info, LineChart, NotebookPen, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DISCLAIMER } from "@shared/types";
 import {
@@ -31,6 +32,20 @@ function isActive(location: string, href: string): boolean {
  */
 export function AppShell({ children, title }: { children: ReactNode; title?: string }) {
   const [location] = useLocation();
+
+  // Unread in-app alerts (edge appeared, lineup problem). Refreshes with
+  // the page; failures fall back to no badge.
+  const alertsQuery = useQuery<{ unread: number }>({
+    queryKey: ["/api/alerts"],
+    queryFn: async () => {
+      const res = await fetch("/api/alerts");
+      if (!res.ok) return { unread: 0 };
+      return res.json();
+    },
+    staleTime: 60_000,
+    retry: false,
+  });
+  const unread = alertsQuery.data?.unread ?? 0;
 
   // Each page starts at the top when navigating.
   useEffect(() => {
@@ -74,6 +89,20 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
                 );
               })}
             </nav>
+
+            <Link
+              href="/history"
+              className="relative flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground hover-elevate"
+              aria-label={`Alerts and history${unread > 0 ? ` (${unread} unread)` : ""}`}
+              data-testid="link-alerts"
+            >
+              <Bell className="h-5 w-5" />
+              {unread > 0 ? (
+                <span className="absolute right-1.5 top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                  {unread > 9 ? "9+" : unread}
+                </span>
+              ) : null}
+            </Link>
 
             <Popover>
               <PopoverTrigger asChild>

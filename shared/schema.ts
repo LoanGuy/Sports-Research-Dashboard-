@@ -185,12 +185,61 @@ export const playerGameLogs = pgTable(
   (t) => [index("player_logs_key_idx").on(t.playerKey, t.statGroup)],
 );
 
+/**
+ * Every surfaced opportunity is snapshotted so the system can be audited
+ * and calibrated: did A-grade cards actually win at the rate the market
+ * math implied? Settled manually from the History page for now.
+ */
+export const opportunitySnapshots = pgTable(
+  "opportunity_snapshots",
+  {
+    id: serial("id").primaryKey(),
+    snapshotKey: text("snapshot_key").notNull().unique(), // dateEt|opportunityId
+    gameDate: text("game_date").notNull(),
+    surfacedAt: timestamp("surfaced_at", { withTimezone: true }).notNull(),
+    eventId: integer("event_id"),
+    eventName: text("event_name").notNull(),
+    player: text("player"),
+    market: text("market").notNull(),
+    side: text("side").notNull(),
+    line: doublePrecision("line"),
+    platform: text("platform").notNull(),
+    offeredOdds: doublePrecision("offered_odds"),
+    consensusProb: doublePrecision("consensus_prob"),
+    breakEvenProb: doublePrecision("break_even_prob"),
+    edgePts: doublePrecision("edge_pts").notNull(),
+    grade: text("grade").notNull(),
+    gradeBasis: text("grade_basis").notNull().default("price"), // price | price+trends | price+verified
+    settledResult: text("settled_result"), // won | lost | push | void | null
+    settledAt: timestamp("settled_at", { withTimezone: true }),
+    closingOdds: doublePrecision("closing_odds"),
+  },
+  (t) => [index("opp_snapshots_date_idx").on(t.gameDate)],
+);
+
+/** In-app alerts (edge appeared, lineup problem). No push — a feed. */
+export const alerts = pgTable(
+  "alerts",
+  {
+    id: serial("id").primaryKey(),
+    kind: text("kind").notNull(), // "edge" | "lineup"
+    message: text("message").notNull(),
+    eventId: integer("event_id"),
+    snapshotKey: text("snapshot_key"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    readAt: timestamp("read_at", { withTimezone: true }),
+  },
+  (t) => [index("alerts_created_idx").on(t.createdAt)],
+);
+
 export type Bet = typeof bets.$inferSelect;
 export type NewBet = typeof bets.$inferInsert;
 export type Trend = typeof trends.$inferSelect;
 export type NewTrend = typeof trends.$inferInsert;
 export type GameContext = typeof gameContext.$inferSelect;
 export type PlayerGameLog = typeof playerGameLogs.$inferSelect;
+export type OpportunitySnapshot = typeof opportunitySnapshots.$inferSelect;
+export type Alert = typeof alerts.$inferSelect;
 
 export type Event = typeof events.$inferSelect;
 export type NewEvent = typeof events.$inferInsert;

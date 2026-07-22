@@ -12,6 +12,7 @@ import AppSettingsPage from "./pages/app-settings";
 import JournalPage from "./pages/journal";
 import ReportPage from "./pages/report";
 import TrendsPage from "./pages/trends";
+import HistoryPage from "./pages/history";
 import LoginPage from "./pages/login";
 import NotFound from "./pages/not-found";
 
@@ -50,6 +51,7 @@ function AppContent() {
         <Route path="/journal" component={JournalPage} />
         <Route path="/report" component={ReportPage} />
         <Route path="/trends" component={TrendsPage} />
+        <Route path="/history" component={HistoryPage} />
         <Route path="/calculators" component={CalculatorsPage} />
         <Route path="/settings" component={AppSettingsPage} />
         <Route component={NotFound} />

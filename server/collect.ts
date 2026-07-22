@@ -11,6 +11,8 @@ import { auditLog, events, marketRecords } from "@shared/schema";
 import { getDb, isDbConfigured } from "./db";
 import { parseOddsApiEvents, parseSgoEvents, type ParsedEvent, type ParsedMarketRow } from "./markets";
 import { mlbContextEnabled, refreshMlbContext } from "./mlb";
+import { getLiveFeed } from "./opportunities";
+import { snapshotOpportunities } from "./history";
 import { findOddsApiKey } from "./providers/theoddsapi";
 
 const BASE = "https://api.sportsgameodds.com";
@@ -179,9 +181,22 @@ export async function runCollection(): Promise<CollectionSummary> {
     }
   }
 
+  // Snapshot the surfaced opportunities for history/calibration and
+  // generate in-app alerts for new qualifying edges. Best-effort.
+  let snapshotNote = "";
+  try {
+    const feed = await getLiveFeed();
+    const snap = await snapshotOpportunities(feed.opportunities);
+    snapshotNote = ` Snapshots: ${snap.inserted} new, ${snap.updated} updated${
+      snap.alertsCreated > 0 ? `, ${snap.alertsCreated} alert(s)` : ""
+    }.`;
+  } catch {
+    snapshotNote = "";
+  }
+
   const message = `Collected ${rowsStored} rows from ${parsedEvents.length} MLB event(s) via SportsGameOdds${
     oddsApi ? `; ${oddsApi.rows} rows from ${oddsApi.events} event(s) via The Odds API (credits left: ${oddsApi.creditsRemaining ?? "?"})` : ""
-  }.${contextNote}`;
+  }.${contextNote}${snapshotNote}`;
   await safeAudit("job", message, { rowsStored, events: parsedEvents.length, skippedStatIds, oddsApi });
   return {
     ok: true,
