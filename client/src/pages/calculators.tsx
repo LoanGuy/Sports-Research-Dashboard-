@@ -515,8 +515,11 @@ function NovigMakeTake() {
             Reading it: a price that "should fill fast" is giving the other side value — you can
             usually do better. "Unlikely to fill" means no rational taker wants the mirror at your
             price unless the market moves. The sweet spot is usually a small positive edge with a
-            reasonable fill chance. Novig only accepts approved price increments — confirm the
-            exact price is valid in the app before posting.
+            reasonable fill chance. Ladder prices follow Novig's tick structure — 5-point steps
+            near even money (−110, −115, −120…), then 10 to ±299, 25 to ±499, 50 to ±999, and 100
+            beyond. The near-even-money steps match Novig's published examples; the outer bands
+            follow their stated structure — if the app rejects a price, use the nearest one it
+            offers.
           </p>
         </>
       ) : (

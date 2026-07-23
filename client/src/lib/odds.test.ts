@@ -20,6 +20,9 @@ import {
   makeOrderLadder,
   mirrorAmerican,
   stepAmerican,
+  isValidTickPrice,
+  nextTickUp,
+  snapToTick,
 } from "@shared/odds";
 
 describe("odds conversions", () => {
@@ -258,5 +261,48 @@ describe("Novig make/take orders", () => {
     for (let i = 1; i < ladder.length; i++) {
       expect(ladder[i].evaluation.edgePts).toBeGreaterThan(ladder[i - 1].evaluation.edgePts);
     }
+  });
+});
+
+describe("Novig tick schedule", () => {
+  it("validates prices against band-specific ticks", () => {
+    // Novig's published examples: -110/-115/-120 valid, -111/-113 not.
+    expect(isValidTickPrice(-110)).toBe(true);
+    expect(isValidTickPrice(-115)).toBe(true);
+    expect(isValidTickPrice(-111)).toBe(false);
+    expect(isValidTickPrice(-113)).toBe(false);
+    // Outer bands: 10 to ±299, 25 to ±499, 50 to ±999, 100 beyond.
+    expect(isValidTickPrice(250)).toBe(true);
+    expect(isValidTickPrice(245)).toBe(false);
+    expect(isValidTickPrice(-325)).toBe(true);
+    expect(isValidTickPrice(-310)).toBe(false);
+    expect(isValidTickPrice(650)).toBe(true);
+    expect(isValidTickPrice(1300)).toBe(true);
+    expect(isValidTickPrice(1350)).toBe(false);
+    // No -100 (canonical +100), nothing inside ±100.
+    expect(isValidTickPrice(-100)).toBe(false);
+    expect(isValidTickPrice(100)).toBe(true);
+    expect(isValidTickPrice(50)).toBe(false);
+  });
+
+  it("steps across band boundaries with the right tick", () => {
+    expect(nextTickUp(-300)).toBe(-290); // entering the 10-tick band
+    expect(nextTickUp(-210)).toBe(-200);
+    expect(nextTickUp(-200)).toBe(-195); // entering the 5-tick band
+    expect(nextTickUp(195)).toBe(200); // leaving the 5-tick band
+    expect(nextTickUp(290)).toBe(300);
+    expect(nextTickUp(475)).toBe(500);
+    expect(nextTickUp(-105)).toBe(100); // never lands on -100
+  });
+
+  it("snaps off-tick take prices toward the maker before laddering", () => {
+    expect(snapToTick(-117)).toBe(-115);
+    expect(snapToTick(122)).toBe(125);
+    expect(snapToTick(-205)).toBe(-200);
+    const ladder = makeOrderLadder(0.55, -117, 4);
+    // Rung 0 keeps the raw take price; rungs 1+ are approved ticks.
+    expect(ladder[0].odds).toBe(-117);
+    expect(ladder.slice(1).map((r) => r.odds)).toEqual([-115, -110, -105]);
+    expect(ladder.slice(1).every((r) => isValidTickPrice(r.odds))).toBe(true);
   });
 });

@@ -325,20 +325,84 @@ export function evaluateMakeOrder(fairProb: number, yourOdds: number): MakeOrder
 }
 
 /**
- * Step American odds by `steps` five-point increments in your favor
- * (higher payout). There are no prices between -100 and +100: the ladder
- * runs …, -110, -105, +100, +105, +110, … (-100 is expressed as +100).
+ * Novig tick schedule. Make orders are only accepted at approved price
+ * increments; increments are smaller near even money and larger for long
+ * shots / heavy favorites (per Novig's published structure — their own
+ * examples: -110/-115/-120 are valid, -111/-113 are not).
+ *
+ * APPROXIMATION NOTE: Novig's exact tick-table article
+ * (support.novig.us/…/tick-table) is the source of truth. The bands
+ * below follow the published structure and confirmed examples; correct
+ * them here if the table differs.
+ */
+export const NOVIG_TICK_BANDS: { maxAbs: number; tick: number }[] = [
+  { maxAbs: 199, tick: 5 },
+  { maxAbs: 299, tick: 10 },
+  { maxAbs: 499, tick: 25 },
+  { maxAbs: 999, tick: 50 },
+  { maxAbs: Number.POSITIVE_INFINITY, tick: 100 },
+];
+
+/** Tick size at a given absolute American-odds level. */
+export function tickSizeFor(american: number): number {
+  const abs = Math.abs(american);
+  for (const band of NOVIG_TICK_BANDS) {
+    if (abs <= band.maxAbs) return band.tick;
+  }
+  return NOVIG_TICK_BANDS[NOVIG_TICK_BANDS.length - 1].tick;
+}
+
+/**
+ * Is this an approved make-order price? |odds| must be >= 100, land on
+ * its band's tick, and -100 is expressed as +100 (both are 50%).
+ */
+export function isValidTickPrice(american: number): boolean {
+  if (!Number.isInteger(american)) return false;
+  if (american === -100) return false; // canonical form is +100
+  const abs = Math.abs(american);
+  if (abs < 100) return false;
+  return abs % tickSizeFor(american) === 0;
+}
+
+/**
+ * The next approved price in your favor (higher payout for you): for a
+ * favorite price the ladder shrinks toward -105 then crosses to +100;
+ * for a dog price it climbs. Band boundaries switch tick size correctly
+ * (…-310, -300, -290… and …195, 200, 210…).
+ */
+export function nextTickUp(american: number): number {
+  let odds = american === -100 ? 100 : american;
+  if (odds < 0) {
+    const abs = -odds;
+    if (abs <= 105) return 100; // -105 → +100 (skip -100)
+    const next = abs - tickSizeFor(abs - 1);
+    return -Math.max(next, 100) === -100 ? 100 : -next;
+  }
+  return odds + tickSizeFor(odds + 1);
+}
+
+/** Snap toward a better-for-you approved price (returns input if valid). */
+export function snapToTick(american: number): number {
+  if (american === -100) return 100;
+  if (isValidTickPrice(american)) return american;
+  const abs = Math.abs(american);
+  if (abs < 100) return 100;
+  const tick = tickSizeFor(american);
+  if (american < 0) {
+    const snapped = -Math.floor(abs / tick) * tick; // toward -100 (better for you)
+    return snapped === -100 ? 100 : snapped;
+  }
+  return Math.ceil(abs / tick) * tick; // toward higher payout
+}
+
+/**
+ * Step American odds by `steps` approved ticks in your favor (higher
+ * payout). Invalid starting prices are first snapped toward you. There
+ * are no prices between -100 and +100.
  */
 export function stepAmerican(american: number, steps: number): number {
-  let odds = american === -100 ? 100 : american;
-  for (let i = 0; i < steps; i++) {
-    if (odds >= 100) {
-      odds += 5;
-    } else {
-      odds += 5; // toward -105, then cross to +100
-      if (odds > -105) odds = 100;
-    }
-  }
+  let odds = snapToTick(american);
+  for (let i = 0; i < steps; i++) odds = nextTickUp(odds);
   return odds;
 }
 
@@ -356,9 +420,14 @@ export interface MakeLadderRung {
  */
 export function makeOrderLadder(fairProb: number, takeOdds: number, rungs = 5): MakeLadderRung[] {
   const out: MakeLadderRung[] = [];
-  for (let i = 0; i < rungs; i++) {
-    const odds = stepAmerican(takeOdds, i);
+  // Rung 0 is the take itself — any displayed price, tick-valid or not.
+  out.push({ odds: takeOdds, evaluation: evaluateMakeOrder(fairProb, takeOdds) });
+  // Later rungs walk the approved tick ladder, strictly better than the take.
+  let odds = snapToTick(takeOdds);
+  if (odds === takeOdds) odds = nextTickUp(odds);
+  for (let i = 1; i < rungs; i++) {
     out.push({ odds, evaluation: evaluateMakeOrder(fairProb, odds) });
+    odds = nextTickUp(odds);
   }
   return out;
 }
