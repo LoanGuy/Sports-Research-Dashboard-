@@ -19,6 +19,7 @@ import {
   kelly,
   probToAmerican,
   probToDecimal,
+  makeOrderLadder,
   removeVig,
   type FlexTier,
 } from "@shared/odds";
@@ -430,6 +431,122 @@ function EntryCalculator() {
   );
 }
 
+/**
+ * Novig take-vs-make analysis. A take order fills instantly at the shown
+ * price; a make order posts YOUR price and waits for someone to take the
+ * mirrored other side (make -120 waits for a +120 taker). The ladder
+ * shows how much edge each posted price would carry — and how likely it
+ * is to actually fill, judged by how attractive the mirror is to a taker.
+ */
+function NovigMakeTake() {
+  const [takeOdds, setTakeOdds] = useState("-125");
+  const [fairProb, setFairProb] = useState("55");
+
+  const ladder = useMemo(() => {
+    const odds = parseNum(takeOdds);
+    const fair = parseNum(fairProb);
+    if (odds === null || fair === null || fair <= 0 || fair >= 100 || Math.abs(odds) < 100) return null;
+    try {
+      return makeOrderLadder(fair / 100, odds, 6);
+    } catch {
+      return null;
+    }
+  }, [takeOdds, fairProb]);
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Current take price (your side)" value={takeOdds} onChange={setTakeOdds} />
+        <Field label="Fair probability" value={fairProb} onChange={setFairProb} suffix="%" />
+      </div>
+      <p className="text-[12px] leading-4 text-muted-foreground">
+        Get the fair probability from the Price check tab (multi-book no-vig consensus). Rung 0 is
+        simply taking the current price; each rung below posts a better price for you and waits.
+      </p>
+
+      {ladder ? (
+        <>
+          <ResultCard title="Price ladder — your make order vs. its taker">
+            {ladder.map((rung, i) => (
+              <div key={rung.odds} className="border-b border-border py-1.5 last:border-0">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-[13px] font-semibold text-foreground">
+                    {i === 0 ? `Take now at ${formatAmerican(rung.odds)}` : `Make at ${formatAmerican(rung.odds)}`}
+                  </span>
+                  <span
+                    className={cn(
+                      "text-[13px] font-semibold tabular-nums",
+                      rung.evaluation.edgePts > 0 ? "text-emerald-400" : "text-red-400",
+                    )}
+                  >
+                    {rung.evaluation.edgePts >= 0 ? "+" : ""}
+                    {rung.evaluation.edgePts.toFixed(1)} pts edge
+                  </span>
+                </div>
+                <div className="mt-0.5 flex items-baseline justify-between gap-2 text-[12px] text-muted-foreground">
+                  <span>
+                    {i === 0
+                      ? "Fills instantly."
+                      : `Needs a taker at ${formatAmerican(rung.evaluation.counterpartyOdds)} on the other side.`}
+                  </span>
+                  {i === 0 ? null : (
+                    <span
+                      className={cn(
+                        "shrink-0 font-medium",
+                        rung.evaluation.fillOutlook === "fills fast"
+                          ? "text-emerald-400"
+                          : rung.evaluation.fillOutlook === "reasonable"
+                            ? "text-amber-400"
+                            : "text-red-400",
+                      )}
+                    >
+                      {rung.evaluation.fillOutlook === "fills fast"
+                        ? "Should fill fast"
+                        : rung.evaluation.fillOutlook === "reasonable"
+                          ? "Reasonable chance"
+                          : "Unlikely to fill"}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </ResultCard>
+          <p className="text-[12px] leading-4 text-muted-foreground">
+            Reading it: a price that "should fill fast" is giving the other side value — you can
+            usually do better. "Unlikely to fill" means no rational taker wants the mirror at your
+            price unless the market moves. The sweet spot is usually a small positive edge with a
+            reasonable fill chance. Novig only accepts approved price increments — confirm the
+            exact price is valid in the app before posting.
+          </p>
+        </>
+      ) : (
+        <p className="text-[13px] text-muted-foreground">
+          Enter American odds (-125 style, no prices between -100 and +100) and a probability
+          between 0 and 100.
+        </p>
+      )}
+
+      <ResultCard title="Order timer rules (Novig)">
+        <ul className="list-inside list-disc space-y-1 py-1 text-[12px] leading-4 text-muted-foreground">
+          <li>
+            Pregame make orders cancel at whichever comes first: your chosen duration expiring, or
+            the game going live — even if your duration runs past the scheduled start.
+          </li>
+          <li>
+            Games can be marked live BEFORE the listed start time; all open pregame make orders
+            cancel when that happens. Watch variable-start events closely.
+          </li>
+          <li>
+            Live make orders require a duration ("Game End" or custom) and cancel at the earlier of
+            that duration or the game ending.
+          </li>
+          <li>Set realistic durations; use shorter ones in fast-moving markets.</li>
+        </ul>
+      </ResultCard>
+    </div>
+  );
+}
+
 function ExchangeCalculator() {
   const [price, setPrice] = useState("52");
   const [fee, setFee] = useState("0");
@@ -673,8 +790,14 @@ export default function CalculatorsPage() {
           <TabsContent value="entry" className="mt-3">
             <EntryCalculator />
           </TabsContent>
-          <TabsContent value="exchange" className="mt-3">
-            <ExchangeCalculator />
+          <TabsContent value="exchange" className="mt-3 space-y-4">
+            <NovigMakeTake />
+            <div>
+              <h3 className="mb-2 text-[13px] font-bold uppercase tracking-wide text-muted-foreground">
+                Contract pricing (cents)
+              </h3>
+              <ExchangeCalculator />
+            </div>
           </TabsContent>
         </Tabs>
       </div>

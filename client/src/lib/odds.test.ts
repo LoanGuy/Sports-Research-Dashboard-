@@ -16,6 +16,10 @@ import {
   probToAmerican,
   probToDecimal,
   removeVig,
+  evaluateMakeOrder,
+  makeOrderLadder,
+  mirrorAmerican,
+  stepAmerican,
 } from "@shared/odds";
 
 describe("odds conversions", () => {
@@ -213,5 +217,46 @@ describe("exchange contract evaluation", () => {
     expect(() => evaluateExchangeContract(0, 0, 0.5)).toThrow();
     expect(() => evaluateExchangeContract(100, 0, 0.5)).toThrow();
     expect(() => evaluateExchangeContract(99, 2, 0.5)).toThrow();
+  });
+});
+
+describe("Novig make/take orders", () => {
+  it("mirrors American odds for the counterparty side", () => {
+    expect(mirrorAmerican(-120)).toBe(120);
+    expect(mirrorAmerican(117)).toBe(-117);
+    expect(mirrorAmerican(100)).toBe(-100);
+    expect(() => mirrorAmerican(-50)).toThrow();
+  });
+
+  it("evaluates a make order for both sides of the match", () => {
+    // Fair 55%; posting -120 needs 54.5% — thin positive edge for you.
+    const evaln = evaluateMakeOrder(0.55, -120);
+    expect(evaln.breakEvenProb).toBeCloseTo(0.5455, 3);
+    expect(evaln.edgePts).toBeCloseTo(0.45, 1);
+    expect(evaln.counterpartyOdds).toBe(120);
+    // Taker of +120 needs 45.45% while fair for them is 45% — slightly bad
+    // for them, so the fill is plausible but not instant.
+    expect(evaln.counterpartyEdgePts).toBeCloseTo(-0.45, 1);
+    expect(evaln.fillOutlook).toBe("reasonable");
+  });
+
+  it("flags prices that give the taker value as fast fills", () => {
+    // Posting -140 when fair is 55%: taker gets +140 needing 41.7% vs fair 45%.
+    const evaln = evaluateMakeOrder(0.55, -140);
+    expect(evaln.counterpartyEdgePts).toBeGreaterThan(0);
+    expect(evaln.fillOutlook).toBe("fills fast");
+  });
+
+  it("steps the price ladder across the ±100 boundary", () => {
+    expect(stepAmerican(-110, 1)).toBe(-105);
+    expect(stepAmerican(-110, 2)).toBe(100);
+    expect(stepAmerican(-110, 3)).toBe(105);
+    expect(stepAmerican(120, 2)).toBe(130);
+    const ladder = makeOrderLadder(0.55, -110, 4);
+    expect(ladder.map((r) => r.odds)).toEqual([-110, -105, 100, 105]);
+    // Edges strictly improve for you as the ladder climbs.
+    for (let i = 1; i < ladder.length; i++) {
+      expect(ladder[i].evaluation.edgePts).toBeGreaterThan(ladder[i - 1].evaluation.edgePts);
+    }
   });
 });

@@ -263,3 +263,102 @@ function assertProb(p: number): void {
     throw new Error(`Probability must be strictly between 0 and 1, got ${p}`);
   }
 }
+
+// ---- Novig make/take orders ----
+//
+// Novig is an exchange: a "take" order accepts an existing price and fills
+// instantly; a "make" order posts your own price and waits for another
+// user to accept the mirrored other side (make Mets -120 ⇢ waits for a
+// Yankees +120 taker). Matching is zero-vig: the two sides' prices mirror.
+
+/**
+ * The counterparty price implied by a make order: the exact opposite
+ * American odds (-120 ⇢ +120). ±100 mirrors to ∓100 (both are 50%).
+ */
+export function mirrorAmerican(american: number): number {
+  if (!Number.isFinite(american) || Math.abs(american) < 100) {
+    throw new Error(`American odds must be <= -100 or >= +100, got ${american}`);
+  }
+  return -american;
+}
+
+export interface MakeOrderEvaluation {
+  /** Break-even probability at your posted price. */
+  breakEvenProb: number;
+  /** Your estimated edge in probability points (fair − break-even) × 100. */
+  edgePts: number;
+  /** Expected profit per $1 staked at your price, given the fair prob. */
+  evPerDollar: number;
+  /** The price the other side must take for your order to fill. */
+  counterpartyOdds: number;
+  /** Break-even probability for the taker of the other side. */
+  counterpartyBreakEvenProb: number;
+  /** The taker's estimated edge (positive = your order gives value away). */
+  counterpartyEdgePts: number;
+  /** Plain-language fill outlook derived from the counterparty's edge. */
+  fillOutlook: "fills fast" | "reasonable" | "unlikely";
+}
+
+/**
+ * Evaluate a Novig make order at `yourOdds` for a side whose fair
+ * probability (from the multi-book no-vig consensus) is `fairProb`.
+ */
+export function evaluateMakeOrder(fairProb: number, yourOdds: number): MakeOrderEvaluation {
+  assertProb(fairProb);
+  const breakEvenProb = americanToImpliedProb(yourOdds);
+  const edgePts = (fairProb - breakEvenProb) * 100;
+  const evPerDollar = fairProb * americanToDecimal(yourOdds) - 1;
+  const counterpartyOdds = mirrorAmerican(yourOdds);
+  const counterpartyBreakEvenProb = americanToImpliedProb(counterpartyOdds);
+  const counterpartyEdgePts = ((1 - fairProb) - counterpartyBreakEvenProb) * 100;
+  const fillOutlook: MakeOrderEvaluation["fillOutlook"] =
+    counterpartyEdgePts >= 0 ? "fills fast" : counterpartyEdgePts >= -1.5 ? "reasonable" : "unlikely";
+  return {
+    breakEvenProb,
+    edgePts,
+    evPerDollar,
+    counterpartyOdds,
+    counterpartyBreakEvenProb,
+    counterpartyEdgePts,
+    fillOutlook,
+  };
+}
+
+/**
+ * Step American odds by `steps` five-point increments in your favor
+ * (higher payout). There are no prices between -100 and +100: the ladder
+ * runs …, -110, -105, +100, +105, +110, … (-100 is expressed as +100).
+ */
+export function stepAmerican(american: number, steps: number): number {
+  let odds = american === -100 ? 100 : american;
+  for (let i = 0; i < steps; i++) {
+    if (odds >= 100) {
+      odds += 5;
+    } else {
+      odds += 5; // toward -105, then cross to +100
+      if (odds > -105) odds = 100;
+    }
+  }
+  return odds;
+}
+
+export interface MakeLadderRung {
+  odds: number;
+  evaluation: MakeOrderEvaluation;
+}
+
+/**
+ * A ladder of candidate make prices, starting at the current take price
+ * (rung 0 = just take it) and improving in five-point increments. Each
+ * rung shows your edge and how attractive the mirrored side is to a
+ * taker. NOTE: Novig only accepts approved price increments — verify a
+ * chosen price is valid in the Novig app before posting.
+ */
+export function makeOrderLadder(fairProb: number, takeOdds: number, rungs = 5): MakeLadderRung[] {
+  const out: MakeLadderRung[] = [];
+  for (let i = 0; i < rungs; i++) {
+    const odds = stepAmerican(takeOdds, i);
+    out.push({ odds, evaluation: evaluateMakeOrder(fairProb, odds) });
+  }
+  return out;
+}
